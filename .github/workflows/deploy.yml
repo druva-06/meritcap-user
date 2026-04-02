@@ -29,19 +29,16 @@ jobs:
             echo "namespace=prod" >> $GITHUB_OUTPUT
             echo "api_url=https://api.meritcap.com" >> $GITHUB_OUTPUT
             echo "vps_host=${{ secrets.VPS_HOST_PROD }}" >> $GITHUB_OUTPUT
-            echo "ssh_key=${{ secrets.VPS_SSH_KEY_PROD }}" >> $GITHUB_OUTPUT
           elif [ "$BRANCH" = "uat" ]; then
             echo "env=uat" >> $GITHUB_OUTPUT
             echo "namespace=uat" >> $GITHUB_OUTPUT
             echo "api_url=https://api-uat.meritcap.com" >> $GITHUB_OUTPUT
             echo "vps_host=${{ secrets.VPS_HOST_UAT }}" >> $GITHUB_OUTPUT
-            echo "ssh_key=${{ secrets.VPS_SSH_KEY_UAT }}" >> $GITHUB_OUTPUT
           else
             echo "env=dev" >> $GITHUB_OUTPUT
             echo "namespace=dev" >> $GITHUB_OUTPUT
             echo "api_url=https://api-dev.meritcap.com" >> $GITHUB_OUTPUT
             echo "vps_host=${{ secrets.VPS_HOST_DEV }}" >> $GITHUB_OUTPUT
-            echo "ssh_key=${{ secrets.VPS_SSH_KEY_DEV }}" >> $GITHUB_OUTPUT
           fi
 
       - name: Log in to GHCR
@@ -66,7 +63,7 @@ jobs:
         with:
           host: ${{ steps.env.outputs.vps_host }}
           username: deployer
-          key: ${{ steps.env.outputs.ssh_key }}
+          key: ${{ steps.env.outputs.env == 'prod' && secrets.VPS_SSH_KEY_PROD || (steps.env.outputs.env == 'uat' && secrets.VPS_SSH_KEY_UAT || secrets.VPS_SSH_KEY_DEV) }}
           script: |
             microk8s kubectl set image deployment/meritcap-user \
               meritcap-user=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}-${{ github.sha }} \
