@@ -549,3 +549,23 @@ export async function updateStudentProfile(data: {
     throw err
   }
 }
+
+export async function sendEmailOTP(email: string): Promise<any> {
+  try {
+    const res = await axios.post("/api/auth/email-otp/send", { email })
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+export async function verifyEmailOTP(email: string, otp: string): Promise<LoginApiResponse> {
+  try {
+    const res = await axios.post<LoginApiResponse>("/api/auth/email-otp/verify", { email, otp })
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data as LoginApiResponse
+    throw err
+  }
+}

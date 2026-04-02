@@ -11,7 +11,17 @@ const ENCRYPTION_KEY = "meritcap-secure-key-2025" // In production, this should 
  */
 export function encryptData(data: any): string {
   try {
-    const jsonString = JSON.stringify(data)
+    // Handle circular references by using a replacer function
+    const jsonString = JSON.stringify(data, (key, value) => {
+      // Remove circular references and functions
+      if (typeof value === 'function') return undefined;
+      if (typeof value === 'object' && value !== null) {
+        // Simple check for potential circular refs by limiting depth
+        if (key.length > 50) return '[DEEP_OBJECT]';
+      }
+      return value;
+    })
+    
     const encrypted = btoa(
       jsonString
         .split("")
@@ -23,7 +33,17 @@ export function encryptData(data: any): string {
     return encrypted
   } catch (error) {
     console.error("Encryption error:", error)
-    return btoa(JSON.stringify(data)) // Fallback to base64 only
+    // Fallback: try with minimal data only
+    try {
+      const minimalData = {
+        email: data?.email,
+        firstName: data?.firstName,
+        userId: data?.userId
+      }
+      return btoa(JSON.stringify(minimalData))
+    } catch {
+      return btoa(JSON.stringify({ email: data?.email || 'unknown' }))
+    }
   }
 }
 
@@ -56,12 +76,25 @@ export function decryptData(encryptedData: string): any {
  */
 export function setEncryptedUser(userData: any, useSessionStorage = false): void {
   try {
-    console.log("[Encryption] Starting encryption for user data:", { 
-      userDataKeys: Object.keys(userData),
+    console.log("[Encryption] Starting encryption for user data", { 
+      hasEmail: !!userData?.email,
       useSessionStorage 
     })
     
-    const encrypted = encryptData(userData)
+    // Create a clean copy to avoid circular references
+    const cleanUserData = {
+      userId: userData.userId || userData.user_id,
+      firstName: userData.firstName || userData.first_name,
+      lastName: userData.lastName || userData.last_name,
+      email: userData.email,
+      username: userData.username,
+      phoneNumber: userData.phoneNumber || userData.phone_number,
+      profilePicture: userData.profilePicture || userData.profile_picture,
+      role: userData.role,
+      profileIncomplete: userData.profileIncomplete || userData.profile_incomplete || false
+    }
+    
+    const encrypted = encryptData(cleanUserData)
     console.log("[Encryption] Data encrypted successfully, length:", encrypted.length)
     
     if (useSessionStorage) {

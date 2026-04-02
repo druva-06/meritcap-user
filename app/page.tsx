@@ -21,6 +21,7 @@ import {
 import type { UnifiedUserProfile } from "@/types/user"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { QuickLoginModal } from "@/components/modals/quick-login-modal"
 
 type Vertical = "study-abroad" | "study-india" | "study-online" | "trainings" | "jobs"
 
@@ -40,6 +41,8 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userData, setUserData] = useState<UnifiedUserProfile | null>(null)
   const [isSearching, setIsSearching] = useState(false)
+  const [showQuickLoginModal, setShowQuickLoginModal] = useState(false)
+  const [pendingSearchParams, setPendingSearchParams] = useState<URLSearchParams | null>(null)
   const router = useRouter()
 
   // Filter states
@@ -186,6 +189,18 @@ export default function HomePage() {
   ]
 
   // Helper functions
+  const handleQuickLoginComplete = (userData: any) => {
+    // Update user state
+    setUserData(userData)
+    setIsLoggedIn(true)
+
+    // Auto-resume pending search if exists
+    if (pendingSearchParams) {
+      router.push(`/search-results?${pendingSearchParams.toString()}`)
+      setPendingSearchParams(null)
+    }
+  }
+
   const getCoursePlaceholder = () => {
     switch (activeVertical) {
       case "study-abroad":
@@ -567,8 +582,17 @@ export default function HomePage() {
 
                           const token = (typeof window !== 'undefined') ? (localStorage.getItem('meritcap_access_token') || sessionStorage.getItem('meritcap_access_token')) : null
                           if (!hasUser && !token) {
-                            // not logged in -> redirect to login page
-                            router.push('/login')
+                            // Not logged in -> store search params and open quick login modal
+                            const searchParams = new URLSearchParams()
+                            searchParams.set("vertical", activeVertical)
+                            if (searchQuery.trim()) searchParams.set("q", searchQuery.trim())
+                            if (selectedCountry && selectedCountry !== "all") searchParams.set("country", selectedCountry)
+                            if (selectedLevel && selectedLevel !== "all") searchParams.set("level", selectedLevel)
+                            if (selectedIntake && selectedIntake !== "all") searchParams.set("intake", selectedIntake)
+                            
+                            setPendingSearchParams(searchParams)
+                            setShowQuickLoginModal(true)
+                            setIsSearching(false)
                             return
                           }
 
@@ -1486,6 +1510,13 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Quick Login Modal */}
+      <QuickLoginModal 
+        isOpen={showQuickLoginModal}
+        onClose={() => setShowQuickLoginModal(false)}
+        onLoginComplete={handleQuickLoginComplete}
+      />
     </>
   )
 }
