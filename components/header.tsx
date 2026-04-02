@@ -185,7 +185,7 @@ export function Header() {
           </Link>
 
           {/* Premium Desktop Navigation - Full Menu for All Users */}
-          <nav className="hidden md:flex items-center space-x-2">
+          <nav className="hidden lg:flex items-center space-x-2">
             {/* Study Dropdown - Compact Version */}
             <div className="relative group">
               <button className="flex items-center space-x-2 text-gray-700 hover:text-slate-900 transition-all duration-300 px-4 py-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 font-semibold text-sm group">
@@ -444,7 +444,7 @@ export function Header() {
               </button>
 
               {/* More Mega Dropdown */}
-              <div className="absolute top-full right-0 mt-3 w-[800px] bg-white/95 backdrop-blur-xl rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform group-hover:translate-y-0 translate-y-2 border border-gray-100/50 z-50">
+              <div className="absolute top-full right-0 mt-3 w-[calc(100vw-2rem)] max-w-[800px] bg-white/95 backdrop-blur-xl rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 transform group-hover:translate-y-0 translate-y-2 border border-gray-100/50 z-50">
                 <div className="p-6">
                   <div className="grid grid-cols-4 gap-6">
                     {/* Career Services Column */}
@@ -628,7 +628,7 @@ export function Header() {
           </nav>
 
           {/* Premium Desktop Auth Buttons */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden lg:flex items-center space-x-4">
             {!isLoggedIn ? (
               <>
                 <div className="relative group">
@@ -792,7 +792,7 @@ export function Header() {
 
           {/* Premium Mobile Menu Button */}
           <button
-            className="md:hidden p-3 rounded-xl text-gray-700 hover:text-slate-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-slate-50 transition-all duration-300 shadow-lg"
+            className="lg:hidden p-3 rounded-xl text-gray-700 hover:text-slate-900 hover:bg-gradient-to-r hover:from-gray-50 hover:to-slate-50 transition-all duration-300 shadow-lg"
             onClick={toggleMenu}
           >
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -800,7 +800,7 @@ export function Header() {
         </div>
 
         {isMenuOpen && (
-          <div className="md:hidden">
+          <div className="lg:hidden">
             {!isLoggedIn ? (
               /* Full mobile menu for non-logged users */
               <div className="px-4 pt-4 pb-6 space-y-4 bg-white/95 backdrop-blur-xl border-t border-gray-100/50">

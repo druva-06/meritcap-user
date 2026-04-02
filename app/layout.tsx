@@ -24,7 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <Header />
-        <main>{children}</main>
+        <main className="min-h-[60vh]">{children}</main>
         <Footer />
         <AIChatbot />
         <Toaster />

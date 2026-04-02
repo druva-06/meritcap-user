@@ -1299,14 +1299,12 @@ export default function HomePage() {
 
             <div
               id="online-tieups-container"
-              className="flex gap-6 overflow-x-auto scrollbar-hide text-left px-7"
+              className="flex gap-6 overflow-x-auto scrollbar-hide text-left px-2 md:px-7 w-full max-w-[864px] mx-auto"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
                 scrollSnapType: "x mandatory",
-                width: "864px", // 6 logos × 96px + 5 gaps × 24px + padding × 2 = 864px
                 overflowX: "scroll",
-                margin: "0 auto",
               }}
             >
               {onlineCourseTieups.map((university, index) => (
