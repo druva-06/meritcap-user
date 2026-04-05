@@ -64,11 +64,17 @@ jobs:
           host: ${{ steps.env.outputs.vps_host }}
           username: deployer
           password: ${{ secrets.DEPLOYER_PASSWORD }}
+          command_timeout: 20m
           script: |
+            set -e
             microk8s kubectl patch deployment meritcap-user -n ${{ steps.env.outputs.namespace }} --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":1,"maxSurge":1}}}}'
             microk8s kubectl set image deployment/meritcap-user \
               meritcap-user=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}-${{ github.sha }} \
               -n ${{ steps.env.outputs.namespace }}
-            microk8s kubectl rollout status deployment/meritcap-user \
-              -n ${{ steps.env.outputs.namespace }} --timeout=600s
+            if ! microk8s kubectl rollout status deployment/meritcap-user -n ${{ steps.env.outputs.namespace }} --timeout=600s; then
+              microk8s kubectl get deployment meritcap-user -n ${{ steps.env.outputs.namespace }} -o wide
+              microk8s kubectl get pods -n ${{ steps.env.outputs.namespace }} -l app=meritcap-user -o wide
+              microk8s kubectl describe deployment meritcap-user -n ${{ steps.env.outputs.namespace }}
+              exit 1
+            fi
             microk8s kubectl get pods -n ${{ steps.env.outputs.namespace }} -l app=meritcap-user
