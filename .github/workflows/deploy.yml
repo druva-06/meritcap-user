@@ -64,6 +64,7 @@ jobs:
           host: ${{ steps.env.outputs.vps_host }}
           username: deployer
           password: ${{ secrets.DEPLOYER_PASSWORD }}
+          timeout: 120s
           command_timeout: 20m
           script: |
             set -e
