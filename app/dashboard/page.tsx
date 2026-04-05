@@ -1104,30 +1104,49 @@ export default function DashboardPage() {
       setWishlistLoading(true)
       setWishlistError(null)
       const res = await getWishlistItems(numericStudentId)
-      if (res?.success && Array.isArray(res?.response)) {
+      
+      // Handle various API response shapes
+      const responseData = res?.response || res?.data || res
+      const isSuccess = res?.success !== false && res?.status !== 'error'
+      
+      if (isSuccess && Array.isArray(responseData)) {
         // Transform snake_case API response to camelCase
-        const items: WishlistItem[] = res.response.map((item: any) => ({
-          wishlistItemId: item.wishlist_item_id,
-          studentId: item.student_id,
-          collegeCourseId: item.college_course_id,
-          collegeName: item.college_name,
-          courseName: item.course_name,
-          campusName: item.campus_name,
-          tuitionFee: item.tuition_fee,
-          intakeMonths: item.intake_months || [],
+        const items: WishlistItem[] = responseData.map((item: any) => ({
+          wishlistItemId: item.wishlist_item_id || item.wishlistItemId,
+          studentId: item.student_id || item.studentId,
+          collegeCourseId: item.college_course_id || item.collegeCourseId,
+          collegeName: item.college_name || item.collegeName,
+          courseName: item.course_name || item.courseName,
+          campusName: item.campus_name || item.campusName,
+          tuitionFee: item.tuition_fee || item.tuitionFee,
+          intakeMonths: item.intake_months || item.intakeMonths || [],
         }))
         setWishlistItems(items)
         // initialize local saved flags for UI toggle (filled heart)
         const initMap: Record<number, boolean> = {}
         for (const it of items) initMap[it.wishlistItemId] = true
         setWishlistLocalSaved(initMap)
-      } else {
+        // Clear any previous error - empty wishlist is not an error
+        setWishlistError(null)
+      } else if (res?.success === false || res?.status === 'error') {
+        // Only set error if API explicitly returned failure
         setWishlistItems([])
         setWishlistError(res?.message || "Failed to load wishlist")
+      } else {
+        // Unknown response shape - treat as empty wishlist, not error
+        setWishlistItems([])
       }
     } catch (e: any) {
-      setWishlistError(e?.response?.data?.message || e?.message || "Failed to load wishlist")
-      setWishlistItems([])
+      // Only set error for actual exceptions, not for empty results
+      const errorMessage = e?.response?.data?.message || e?.message || ""
+      // Check if it's a "not found" type error which might mean empty wishlist
+      if (errorMessage.toLowerCase().includes("not found") || e?.response?.status === 404) {
+        setWishlistItems([])
+        setWishlistError(null)
+      } else {
+        setWishlistError(errorMessage || "Failed to load wishlist")
+        setWishlistItems([])
+      }
     } finally {
       setWishlistLoading(false)
     }

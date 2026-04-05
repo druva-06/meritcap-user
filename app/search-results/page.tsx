@@ -310,7 +310,7 @@ function SearchResultsContent() {
         filters: {
           courses: [],
           departments: [],
-          graduation_levels: apiLevels,
+          graduationLevels: apiLevels,
           countries: apiCountries,
           duration: apiDuration,
           // If URL contains an intake parameter, use it. Otherwise use empty array so backend returns all.

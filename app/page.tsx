@@ -657,7 +657,7 @@ export default function HomePage() {
                             return []
                           }
 
-                          const graduation_levels = selectedLevel && selectedLevel !== "all" ? [mapLevelToApi(selectedLevel)].filter(Boolean) : []
+                          const graduationLevels = selectedLevel && selectedLevel !== "all" ? [mapLevelToApi(selectedLevel)].filter(Boolean) : []
                           const countries = selectedCountry && selectedCountry !== "all" ? [mapCountryToApi(selectedCountry)].filter(Boolean) : []
                           const intakeMonths = selectedIntake && selectedIntake !== "all" ? mapIntakeToMonths(selectedIntake) : []
 
@@ -666,7 +666,7 @@ export default function HomePage() {
                             filters: {
                               courses: [],
                               departments: [],
-                              graduation_levels,
+                              graduationLevels,
                               countries,
                               duration: { minMonths: 0, maxMonths: 48 },
                               intakeMonths,
