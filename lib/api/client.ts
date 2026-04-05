@@ -569,3 +569,79 @@ export async function verifyEmailOTP(email: string, otp: string): Promise<LoginA
     throw err
   }
 }
+
+// Google OAuth APIs
+export interface GoogleAuthUrlResponse {
+  success: boolean
+  message: string
+  status: number
+  response?: {
+    auth_url: string
+    state: string
+  }
+}
+
+export interface GoogleCallbackResponse {
+  success: boolean
+  message: string
+  status: number
+  response?: {
+    id_token: string
+    access_token: string
+    refresh_token: string
+    token_type: string
+    expires_in: number
+    user?: any
+  }
+}
+
+export async function getGoogleAuthUrl(redirectUri?: string): Promise<GoogleAuthUrlResponse> {
+  try {
+    const params = redirectUri ? { redirectUri } : {}
+    const res = await axios.get<GoogleAuthUrlResponse>("/api/auth/google/url", { params })
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data as GoogleAuthUrlResponse
+    throw err
+  }
+}
+
+export async function handleGoogleCallback(code: string, redirectUri?: string): Promise<LoginApiResponse> {
+  try {
+    const payload: { code: string; redirect_uri?: string } = { code }
+    if (redirectUri) {
+      payload.redirect_uri = redirectUri
+    }
+    const res = await axios.post<LoginApiResponse>("/api/auth/google/callback", payload)
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data as LoginApiResponse
+    throw err
+  }
+}
+
+// Update username for OAuth users with incomplete profiles
+export async function updateUsername(userId: number, username: string): Promise<any> {
+  try {
+    const res = await axios.put(`/api/auth/username`, { username }, {
+      params: { userId }
+    })
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+// Update phone number for users with placeholder phones or incomplete profiles
+export async function updatePhoneNumber(userId: number, phoneNumber: string): Promise<any> {
+  try {
+    const res = await axios.put(`/api/auth/phone`, { phone_number: phoneNumber }, {
+      params: { userId }
+    })
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}

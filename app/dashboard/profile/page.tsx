@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { getStudentEducation, uploadProfileImage, getStudentProfile } from "@/lib/api/client"
 import type { StudentEducation } from "@/lib/api/types"
+import { isPlaceholderPhone } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
 
@@ -921,7 +922,11 @@ export default function ViewProfilePage() {
               </div> */}
               <div className="group">
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Phone Number</label>
-                <p className="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{user.phone || "N/A"}</p>
+                <p className="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  {user.phone && !isPlaceholderPhone(user.phone) ? user.phone : (
+                    <span className="text-gray-400 italic">Add phone number</span>
+                  )}
+                </p>
               </div>
               <div className="group">
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Gender</label>

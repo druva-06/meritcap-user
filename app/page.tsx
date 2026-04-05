@@ -1516,6 +1516,7 @@ export default function HomePage() {
         isOpen={showQuickLoginModal}
         onClose={() => setShowQuickLoginModal(false)}
         onLoginComplete={handleQuickLoginComplete}
+        pendingSearchParams={pendingSearchParams?.toString()}
       />
     </>
   )

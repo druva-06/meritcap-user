@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { User, GraduationCap, Save, ArrowLeft, Award, Plus, Trash2, X, Loader2, Check, Edit, CheckCircle2 } from "lucide-react"
-import { getStudentEducation, createStudentEducation, updateStudentEducation, deleteStudentEducation, getStudentProfile, updateStudentProfile } from "@/lib/api/client"
+import { getStudentEducation, createStudentEducation, updateStudentEducation, deleteStudentEducation, getStudentProfile, updateStudentProfile, updateUsername as updateUsernameApi, updatePhoneNumber as updatePhoneApi } from "@/lib/api/client"
 import type { StudentEducation } from "@/lib/api/types"
 import { useToast } from "@/hooks/use-toast"
-import { getEncryptedUser } from "@/lib/encryption"
+import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
+import { isPlaceholderPhone } from "@/lib/utils"
 
 interface Education {
     id: string
@@ -66,6 +67,21 @@ export default function EditProfilePage() {
     const [isUpdatingPersonalInfo, setIsUpdatingPersonalInfo] = useState(false)
     const [personalInfoSaved, setPersonalInfoSaved] = useState(false)
 
+    // Username editing state for OAuth users
+    const [isProfileIncomplete, setIsProfileIncomplete] = useState(false)
+    const [userId, setUserId] = useState<number | null>(null)
+    const [editableUsername, setEditableUsername] = useState("")
+    const [isUpdatingUsername, setIsUpdatingUsername] = useState(false)
+    const [usernameSaved, setUsernameSaved] = useState(false)
+    const [usernameError, setUsernameError] = useState<string | null>(null)
+
+    // Phone editing state for users with placeholder phones
+    const [hasPlaceholderPhone, setHasPlaceholderPhone] = useState(false)
+    const [editablePhone, setEditablePhone] = useState("")
+    const [isUpdatingPhone, setIsUpdatingPhone] = useState(false)
+    const [phoneSaved, setPhoneSaved] = useState(false)
+    const [phoneError, setPhoneError] = useState<string | null>(null)
+
     // Fetch user data from encrypted storage and API on component mount
     useEffect(() => {
         const fetchUserData = async () => {
@@ -109,6 +125,29 @@ export default function EditProfilePage() {
                                         intakePreference: userData.preferences?.intakePreference || "",
                                     },
                                 })
+
+                                // Check if this is an OAuth user with incomplete profile
+                                const profileIncomplete = userData.profileIncomplete || userData.profile_incomplete || false
+                                setIsProfileIncomplete(profileIncomplete)
+                                setEditableUsername(userData.username || "")
+                                
+                                // Check if user has placeholder phone
+                                const userPhone = userData.phone_number || userData.phone || ""
+                                const isPlaceholder = isPlaceholderPhone(userPhone)
+                                setHasPlaceholderPhone(isPlaceholder)
+                                setEditablePhone(isPlaceholder ? "" : userPhone)
+                                
+                                // Get user ID for API calls
+                                const userIdValue = userData.user_id || userData.id || userData.userId
+                                if (userIdValue) {
+                                    setUserId(Number(userIdValue))
+                                } else if (userData.studentId) {
+                                    // Extract numeric ID from studentId (e.g., "WC15" → 15)
+                                    const numericMatch = String(userData.studentId).match(/\d+/)
+                                    if (numericMatch) {
+                                        setUserId(parseInt(numericMatch[0], 10))
+                                    }
+                                }
 
                                 // Format date from YYYY-MM-DD to DD/MM/YYYY for display, then back for input
                                 const formatDateForInput = (dateStr: string) => {
@@ -519,6 +558,118 @@ export default function EditProfilePage() {
         }
     }
 
+    const handleUpdateUsername = async () => {
+        if (!userId) {
+            setUsernameError("User ID not found. Please try logging in again.")
+            return
+        }
+
+        const trimmedUsername = editableUsername.trim().toLowerCase()
+        
+        // Validate username
+        if (trimmedUsername.length < 3) {
+            setUsernameError("Username must be at least 3 characters")
+            return
+        }
+        if (trimmedUsername.length > 30) {
+            setUsernameError("Username must be less than 30 characters")
+            return
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+            setUsernameError("Username can only contain letters, numbers, and underscores")
+            return
+        }
+
+        setIsUpdatingUsername(true)
+        setUsernameSaved(false)
+        setUsernameError(null)
+
+        try {
+            const response = await updateUsernameApi(userId, trimmedUsername)
+
+            if (response.success) {
+                // Update local storage with new username
+                const userData = getEncryptedUser()
+                if (userData) {
+                    userData.username = trimmedUsername
+                    setEncryptedUser(userData, true)
+                }
+                
+                // Update form data
+                setFormData(prev => ({ ...prev, username: trimmedUsername }))
+                
+                setUsernameSaved(true)
+                toast({
+                    title: "Success",
+                    description: "Username updated successfully!",
+                })
+                setTimeout(() => setUsernameSaved(false), 3000)
+            } else {
+                setUsernameError(response.message || "Failed to update username")
+            }
+        } catch (error: any) {
+            console.error("Error updating username:", error)
+            setUsernameError(error.message || "Failed to update username")
+        } finally {
+            setIsUpdatingUsername(false)
+        }
+    }
+
+    const handleUpdatePhone = async () => {
+        if (!userId) {
+            setPhoneError("User ID not found. Please try logging in again.")
+            return
+        }
+
+        const trimmedPhone = editablePhone.trim()
+        
+        // Validate phone
+        if (trimmedPhone.length === 0) {
+            setPhoneError("Phone number is required")
+            return
+        }
+        if (!/^[\+]?[0-9]{10,15}$/.test(trimmedPhone)) {
+            setPhoneError("Phone number must be 10-15 digits with optional + prefix")
+            return
+        }
+
+        setIsUpdatingPhone(true)
+        setPhoneSaved(false)
+        setPhoneError(null)
+
+        try {
+            const response = await updatePhoneApi(userId, trimmedPhone)
+
+            if (response.success) {
+                // Update local storage with new phone
+                const userData = getEncryptedUser()
+                if (userData) {
+                    userData.phone_number = trimmedPhone
+                    userData.phone = trimmedPhone
+                    setEncryptedUser(userData, true)
+                }
+                
+                // Update form data and state
+                setFormData(prev => ({ ...prev, phone: trimmedPhone }))
+                setHasPlaceholderPhone(false)
+                
+                setPhoneSaved(true)
+                toast({
+                    title: "Success",
+                    description: "Phone number updated successfully!",
+                })
+                setTimeout(() => setPhoneSaved(false), 3000)
+            } else {
+                setPhoneError(response.message || "Failed to update phone number")
+            }
+        } catch (error: any) {
+            console.error("Error updating phone:", error)
+            setPhoneError(error.message || "Failed to update phone number")
+        } finally {
+            setIsUpdatingPhone(false)
+        }
+    }
+
     const handleSave = async () => {
         setIsLoading(true)
         // Simulate API call
@@ -659,13 +810,54 @@ export default function EditProfilePage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-600 mb-2 block">Username</label>
-                                        <Input
-                                            value={formData.username}
-                                            readOnly
-                                            disabled
-                                            className="border-gray-300 bg-gray-50 cursor-not-allowed"
-                                        />
+                                        <label className="text-sm font-medium text-gray-600 mb-2 block">
+                                            Username {isProfileIncomplete && <span className="text-blue-600 text-xs">(Editable)</span>}
+                                        </label>
+                                        {isProfileIncomplete ? (
+                                            <div className="space-y-2">
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        value={editableUsername}
+                                                        onChange={(e) => {
+                                                            setEditableUsername(e.target.value)
+                                                            setUsernameError(null)
+                                                        }}
+                                                        className={`border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${usernameError ? 'border-red-500' : ''}`}
+                                                        placeholder="Enter your username"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        onClick={handleUpdateUsername}
+                                                        disabled={isUpdatingUsername || editableUsername === formData.username}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 shrink-0"
+                                                    >
+                                                        {isUpdatingUsername ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : usernameSaved ? (
+                                                            <Check className="w-4 h-4" />
+                                                        ) : (
+                                                            "Update"
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                                {usernameError && (
+                                                    <p className="text-red-500 text-sm">{usernameError}</p>
+                                                )}
+                                                {usernameSaved && (
+                                                    <p className="text-green-600 text-sm flex items-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                        Username updated successfully
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <Input
+                                                value={formData.username}
+                                                readOnly
+                                                disabled
+                                                className="border-gray-300 bg-gray-50 cursor-not-allowed"
+                                            />
+                                        )}
                                     </div>
                                     <div>
                                         <label className="text-sm font-medium text-gray-600 mb-2 block">Email Address *</label>
@@ -678,13 +870,61 @@ export default function EditProfilePage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-600 mb-2 block">Phone Number *</label>
-                                        <Input
-                                            value={formData.phone}
-                                            readOnly
-                                            disabled
-                                            className="border-gray-300 bg-gray-50 cursor-not-allowed"
-                                        />
+                                        <label className="text-sm font-medium text-gray-600 mb-2 block">
+                                            Phone Number {hasPlaceholderPhone || isProfileIncomplete ? "" : "*"}
+                                        </label>
+                                        {hasPlaceholderPhone || isProfileIncomplete ? (
+                                            <div className="space-y-2">
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        type="tel"
+                                                        placeholder="Enter your phone number"
+                                                        value={editablePhone}
+                                                        onChange={(e) => {
+                                                            setEditablePhone(e.target.value)
+                                                            setPhoneError(null)
+                                                            setPhoneSaved(false)
+                                                        }}
+                                                        className={`flex-1 border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${phoneError ? "border-red-500" : ""}`}
+                                                        disabled={isUpdatingPhone}
+                                                    />
+                                                    <Button
+                                                        onClick={handleUpdatePhone}
+                                                        disabled={isUpdatingPhone || !editablePhone.trim() || phoneSaved}
+                                                        size="sm"
+                                                        className={phoneSaved ? "bg-green-600 hover:bg-green-700" : ""}
+                                                    >
+                                                        {isUpdatingPhone ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : phoneSaved ? (
+                                                            <>
+                                                                <Check className="w-4 h-4 mr-1" />
+                                                                Updated
+                                                            </>
+                                                        ) : (
+                                                            "Update"
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                                {phoneError && (
+                                                    <p className="text-sm text-red-600">
+                                                        {phoneError}
+                                                    </p>
+                                                )}
+                                                {hasPlaceholderPhone && !editablePhone && (
+                                                    <p className="text-sm text-gray-500">
+                                                        Add your phone number to complete your profile
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <Input
+                                                value={formData.phone}
+                                                readOnly
+                                                disabled
+                                                className="border-gray-300 bg-gray-50 cursor-not-allowed"
+                                            />
+                                        )}
                                     </div>
                                 </div>
 

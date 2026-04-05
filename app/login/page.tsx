@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Phone, MessageSquare } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { ProfileCompletionModal } from "@/components/modals/profile-completion-modal"
 import type { UnifiedUserProfile } from "@/types/user"
-import { login as loginApi } from "@/lib/api/client"
+import { login as loginApi, getGoogleAuthUrl } from "@/lib/api/client"
 import { setToken, setRefreshToken } from "@/lib/auth"
 import type { LoginRequest } from "@/lib/api/types"
 import { setEncryptedUser } from "@/lib/encryption"
@@ -22,15 +22,11 @@ export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [userData, setUserData] = useState<UnifiedUserProfile | null>(null)
-  const [authMethod, setAuthMethod] = useState<"email" | "phone" | "google">("email")
-  const [showOTP, setShowOTP] = useState(false)
-  const [otp, setOtp] = useState("")
-  const [otpSent, setOtpSent] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
-    phone: "",
     password: "",
     rememberMe: false,
   })
@@ -43,239 +39,135 @@ export default function LoginPage() {
     }))
   }
 
-  const handleSendOTP = async () => {
-    if (!formData.phone) {
-      toast({
-        title: "Phone Required",
-        description: "Please enter your phone number",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setOtpSent(true)
-      setShowOTP(true)
-      toast({
-        title: "OTP Sent! 📱",
-        description: `Verification code sent to ${formData.phone}`,
-      })
-    } catch (error) {
-      toast({
-        title: "Failed to Send OTP",
-        description: "Please try again",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleGoogleLogin = async () => {
-    setLoading(true)
+    setGoogleLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      // Store remember me preference for use after callback
+      localStorage.setItem("meritcap_remember_me", formData.rememberMe.toString())
 
-      const googleUserData = {
-        email: "user@gmail.com",
-        name: "Google User",
-        phone: "",
-        loginTime: new Date().toISOString(),
-        focusArea: "Study Abroad",
-        dateOfBirth: "",
-        nationality: "",
-        currentLocation: "",
-        lastEducation: "",
-        lastEducationPercentage: "",
-        lastEducationYear: "",
-        lastEducationInstitution: "",
-        hasTestScores: false,
-        testScores: [],
-        profileCompleted: false,
-        profileCompletion: 25,
-        profileStage: "basic" as const,
-        studentId: `WC${Date.now()}`,
-        signupTime: new Date().toISOString(),
+      // Get redirect URI for the callback
+      const redirectUri = typeof window !== "undefined" 
+        ? `${window.location.origin}/auth/callback` 
+        : undefined
+
+      // Get Google OAuth URL from backend
+      const response = await getGoogleAuthUrl(redirectUri)
+      
+      if (response.success && response.response?.auth_url) {
+        // Redirect to Google OAuth
+        window.location.href = response.response.auth_url
+      } else {
+        toast({
+          title: "Google Login Failed",
+          description: response.message || "Failed to initiate Google sign-in",
+          variant: "destructive",
+        })
+        setGoogleLoading(false)
       }
-
-      setUserData(googleUserData as UnifiedUserProfile)
-      toast({
-        title: "Google Login Successful! 🎉",
-        description: "Welcome! Let's complete your profile.",
-      })
-      setShowProfileModal(true)
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Google Login Failed",
-        description: "Please try again",
+        description: error?.message || "Please try again",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleOTPVerification = async () => {
-    if (!otp || otp.length !== 6) {
-      toast({
-        title: "Invalid OTP",
-        description: "Please enter the 6-digit OTP",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const phoneUserData = {
-        email: "",
-        phone: formData.phone,
-        name: "Phone User",
-        loginTime: new Date().toISOString(),
-        focusArea: "Study Abroad",
-        dateOfBirth: "",
-        nationality: "",
-        currentLocation: "",
-        lastEducation: "",
-        lastEducationPercentage: "",
-        lastEducationYear: "",
-        lastEducationInstitution: "",
-        hasTestScores: false,
-        testScores: [],
-        profileCompleted: false,
-        profileCompletion: 25,
-        profileStage: "basic" as const,
-        studentId: `WC${Date.now()}`,
-        signupTime: new Date().toISOString(),
-      }
-
-      setUserData(phoneUserData as UnifiedUserProfile)
-      toast({
-        title: "Phone Verification Successful! 🎉",
-        description: "Welcome! Let's complete your profile.",
-      })
-      setShowProfileModal(true)
-    } catch (error) {
-      toast({
-        title: "OTP Verification Failed",
-        description: "Please check your OTP and try again",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+      setGoogleLoading(false)
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (authMethod === "phone" && !showOTP) {
-      handleSendOTP()
-      return
-    }
-
-    if (authMethod === "phone" && showOTP) {
-      handleOTPVerification()
-      return
-    }
-
     // Email/password login via API
-    if (authMethod === "email") {
-      setLoading(true)
-      try {
-        if (!formData.email || !formData.password) {
-          toast({ title: "Validation Error", description: "Please fill in all required fields", variant: "destructive" })
-          return
-        }
-
-        const payload: LoginRequest = { email: formData.email, password: formData.password }
-        const res = await loginApi(payload)
-
-        if (res?.success && res?.response?.access_token) {
-          // Enforce role-based access: this is the Student portal, only allow users with role 'student'
-          const backendRole = res.response.user?.role || ""
-          if (backendRole && backendRole.toLowerCase() !== "student") {
-            toast({ title: "Unauthorized", description: "Your account is not allowed to login to the Student portal.", variant: "destructive" })
-            return
-          }
-          // store tokens according to rememberMe
-          const remember = formData.rememberMe
-          // use helper that writes to localStorage or sessionStorage
-          try {
-            // save tokens to chosen storage
-            const { saveToken, saveRefreshToken } = await import("@/lib/auth")
-            saveToken(res.response.access_token, remember)
-            if (res.response.refresh_token) saveRefreshToken(res.response.refresh_token, remember)
-          } catch (e) {
-            // fallback to localStorage
-            setToken(res.response.access_token)
-            if (res.response.refresh_token) setRefreshToken(res.response.refresh_token)
-          }
-
-          // save minimal user info
-          const user = res.response.user
-          const mapped: UnifiedUserProfile = {
-            name: `${user.first_name} ${user.last_name}`,
-            email: user.email,
-            phone: user.phone_number || "",
-            username: user.username || "",
-            dateOfBirth: "",
-            nationality: "",
-            currentLocation: "",
-            lastEducation: "",
-            lastEducationPercentage: "",
-            lastEducationYear: "",
-            lastEducationInstitution: "",
-            hasTestScores: false,
-            testScores: [],
-            profileCompleted: false,
-            profileCompletion: 25,
-            profileStage: "basic",
-            studentId: `WC${user.user_id}`,
-            loginTime: new Date().toISOString(),
-            signupTime: new Date().toISOString(),
-            profile_picture: user.profile_picture || "",
-          }
-
-          setUserData(mapped)
-          try {
-            console.log("[Login] Attempting to store encrypted user data")
-            // Store encrypted user data ONLY
-            setEncryptedUser(mapped, !formData.rememberMe)
-            console.log("[Login] Encrypted user data stored successfully")
-          } catch (e) {
-            console.error("[Login] Failed to store encrypted data:", e)
-            // Fallback to unencrypted storage
-            if (formData.rememberMe) {
-              localStorage.setItem("meritcap_user", JSON.stringify(mapped))
-            } else {
-              sessionStorage.setItem("meritcap_user", JSON.stringify(mapped))
-            }
-          }
-          // Notify other components in the same window to refresh auth state
-          try {
-            window.dispatchEvent(new Event("authStateChanged"))
-          } catch (e) {
-            // ignore during SSR or if window is not available
-          }
-
-          toast({ title: "Login Successful", description: res.message })
-          router.push("/")
-        } else {
-          const msg = res?.message || res?.response?.message || "Invalid credentials"
-          toast({ title: "Login Failed", description: msg, variant: "destructive" })
-        }
-      } catch (err: any) {
-        toast({ title: "Login Error", description: err?.response?.data?.message || err.message || "Failed to login", variant: "destructive" })
-      } finally {
+    setLoading(true)
+    try {
+      if (!formData.email || !formData.password) {
+        toast({ title: "Validation Error", description: "Please fill in all required fields", variant: "destructive" })
         setLoading(false)
+        return
       }
 
-      return
+      const payload: LoginRequest = { email: formData.email, password: formData.password }
+      const res = await loginApi(payload)
+
+      if (res?.success && res?.response?.access_token) {
+        // Enforce role-based access: this is the Student portal, only allow users with role 'student'
+        const backendRole = res.response.user?.role || ""
+        if (backendRole && backendRole.toLowerCase() !== "student") {
+          toast({ title: "Unauthorized", description: "Your account is not allowed to login to the Student portal.", variant: "destructive" })
+          setLoading(false)
+          return
+        }
+        // store tokens according to rememberMe
+        const remember = formData.rememberMe
+        // use helper that writes to localStorage or sessionStorage
+        try {
+          // save tokens to chosen storage
+          const { saveToken, saveRefreshToken } = await import("@/lib/auth")
+          saveToken(res.response.access_token, remember)
+          if (res.response.refresh_token) saveRefreshToken(res.response.refresh_token, remember)
+        } catch (e) {
+          // fallback to localStorage
+          setToken(res.response.access_token)
+          if (res.response.refresh_token) setRefreshToken(res.response.refresh_token)
+        }
+
+        // save minimal user info
+        const user = res.response.user
+        const mapped: UnifiedUserProfile = {
+          name: `${user.first_name} ${user.last_name}`,
+          email: user.email,
+          phone: user.phone_number || "",
+          username: user.username || "",
+          dateOfBirth: "",
+          nationality: "",
+          currentLocation: "",
+          lastEducation: "",
+          lastEducationPercentage: "",
+          lastEducationYear: "",
+          lastEducationInstitution: "",
+          hasTestScores: false,
+          testScores: [],
+          profileCompleted: false,
+          profileCompletion: 25,
+          profileStage: "basic",
+          studentId: `WC${user.user_id}`,
+          loginTime: new Date().toISOString(),
+          signupTime: new Date().toISOString(),
+          profile_picture: user.profile_picture || "",
+        }
+
+        setUserData(mapped)
+        try {
+          console.log("[Login] Attempting to store encrypted user data")
+          // Store encrypted user data ONLY
+          setEncryptedUser(mapped, !formData.rememberMe)
+          console.log("[Login] Encrypted user data stored successfully")
+        } catch (e) {
+          console.error("[Login] Failed to store encrypted data:", e)
+          // Fallback to unencrypted storage
+          if (formData.rememberMe) {
+            localStorage.setItem("meritcap_user", JSON.stringify(mapped))
+          } else {
+            sessionStorage.setItem("meritcap_user", JSON.stringify(mapped))
+          }
+        }
+        // Notify other components in the same window to refresh auth state
+        try {
+          window.dispatchEvent(new Event("authStateChanged"))
+        } catch (e) {
+          // ignore during SSR or if window is not available
+        }
+
+        toast({ title: "Login Successful", description: res.message })
+        router.push("/")
+      } else {
+        const msg = res?.message || res?.response?.message || "Invalid credentials"
+        toast({ title: "Login Failed", description: msg, variant: "destructive" })
+      }
+    } catch (err: any) {
+      toast({ title: "Login Error", description: err?.response?.data?.message || err.message || "Failed to login", variant: "destructive" })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -313,197 +205,126 @@ export default function LoginPage() {
         <Card className="border-0 shadow-xl">
           <CardHeader className="text-center pb-4">
             <CardTitle className="text-xl">Student Login</CardTitle>
-            {/* <div className="flex justify-center gap-2 mt-4">
-              <Button
-                type="button"
-                variant={authMethod === "email" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAuthMethod("email")}
-                className="text-xs"
-              >
-                <Mail className="w-3 h-3 mr-1" />
-                Email
-              </Button>
-              <Button
-                type="button"
-                variant={authMethod === "phone" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAuthMethod("phone")}
-                className="text-xs"
-              >
-                <Phone className="w-3 h-3 mr-1" />
-                Phone
-              </Button>
-              <Button
-                type="button"
-                variant={authMethod === "google" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setAuthMethod("google")}
-                className="text-xs"
-              >
-                <MessageSquare className="w-3 h-3 mr-1" />
-                Google
-              </Button>
-            </div> */}
           </CardHeader>
           <CardContent>
-            {authMethod === "google" ? (
-              <div className="space-y-4">
-                <Button
-                  onClick={handleGoogleLogin}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Signing in with Google...</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <MessageSquare className="w-4 h-4" />
-                      <span>Continue with Google</span>
-                    </div>
-                  )}
-                </Button>
+            {/* Google Sign-in Button */}
+            <Button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={googleLoading || loading}
+              variant="outline"
+              className="w-full h-12 text-base font-medium border-2 hover:bg-gray-50 mb-4"
+            >
+              {googleLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Connecting to Google...
+                </>
+              ) : (
+                <>
+                  <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  Continue with Google
+                </>
+              )}
+            </Button>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {authMethod === "email" ? (
-                  <div>
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="relative mt-1">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        placeholder="Enter your email"
-                        required
-                      />
-                    </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-muted-foreground">
+                  Or sign in with email
+                </span>
+              </div>
+            </div>
+
+            {/* Email/Password Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="email">Email Address</Label>
+                <div className="relative mt-1">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className="pl-10"
+                    placeholder="Enter your email"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="password">Password</Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="pl-10 pr-10"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="rememberMe"
+                    name="rememberMe"
+                    checked={formData.rememberMe}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({ ...prev, rememberMe: checked as boolean }))
+                    }
+                  />
+                  <Label htmlFor="rememberMe" className="text-sm">
+                    Remember me
+                  </Label>
+                </div>
+                <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
+                  Forgot password?
+                </Link>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5"
+                disabled={loading || googleLoading}
+              >
+                {loading ? (
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Signing in...</span>
                   </div>
                 ) : (
-                  <div>
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <div className="relative mt-1">
-                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="pl-10"
-                        placeholder="+91 9876543210"
-                        required
-                      />
-                    </div>
+                  <div className="flex items-center space-x-2">
+                    <span>Sign In</span>
+                    <ArrowRight className="w-4 h-4" />
                   </div>
                 )}
-
-                {showOTP && authMethod === "phone" ? (
-                  <div>
-                    <Label htmlFor="otp">Enter OTP</Label>
-                    <div className="relative mt-1">
-                      <MessageSquare className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        id="otp"
-                        name="otp"
-                        type="text"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value)}
-                        className="pl-10"
-                        placeholder="Enter 6-digit OTP"
-                        maxLength={6}
-                        required
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">OTP sent to {formData.phone}</p>
-                  </div>
-                ) : (
-                  authMethod === "email" && (
-                    <div>
-                      <Label htmlFor="password">Password</Label>
-                      <div className="relative mt-1">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <Input
-                          id="password"
-                          name="password"
-                          type={showPassword ? "text" : "password"}
-                          value={formData.password}
-                          onChange={handleInputChange}
-                          className="pl-10 pr-10"
-                          placeholder="Enter your password"
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                )}
-
-                {authMethod === "email" && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="rememberMe"
-                        name="rememberMe"
-                        checked={formData.rememberMe}
-                        onCheckedChange={(checked) =>
-                          setFormData((prev) => ({ ...prev, rememberMe: checked as boolean }))
-                        }
-                      />
-                      <Label htmlFor="rememberMe" className="text-sm">
-                        Remember me
-                      </Label>
-                    </div>
-                    <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
-                      Forgot password?
-                    </Link>
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>
-                        {authMethod === "phone" && !showOTP
-                          ? "Sending OTP..."
-                          : authMethod === "phone" && showOTP
-                            ? "Verifying..."
-                            : "Signing in..."}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <span>
-                        {authMethod === "phone" && !showOTP
-                          ? "Send OTP"
-                          : authMethod === "phone" && showOTP
-                            ? "Verify OTP"
-                            : "Sign In"}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
-                    </div>
-                  )}
-                </Button>
-              </form>
-            )}
+              </Button>
+            </form>
 
             <div className="mt-6 text-center">
               <p className="text-gray-600">
