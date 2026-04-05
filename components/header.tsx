@@ -64,7 +64,7 @@ export function Header() {
 
         if (user) {
           setIsLoggedIn(true)
-          setUserName(user.name || "User")
+          setUserName(user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "User")
           setProfilePicture(user.profile_picture || "")
           return
         }

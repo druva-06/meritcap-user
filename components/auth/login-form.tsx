@@ -22,6 +22,19 @@ export default function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
     const [loading, setLoading] = useState(false)
     const [rememberMe, setRememberMe] = useState(false)
 
+    const toCanonicalUser = (apiUser: any) => ({
+        user_id: apiUser.user_id,
+        first_name: apiUser.first_name || "",
+        last_name: apiUser.last_name || "",
+        email: apiUser.email || "",
+        username: apiUser.username || "",
+        phone_number: apiUser.phone_number || "",
+        role: apiUser.role || "",
+        profile_picture: apiUser.profile_picture || "",
+        profile_incomplete: apiUser.profile_incomplete || false,
+        login_time: new Date().toISOString(),
+    })
+
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault()
         if (!email || !password) return toast({ title: "Validation", description: "Please fill email and password", variant: "destructive" })
@@ -40,6 +53,7 @@ export default function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
                 }
 
                 const user = res.response.user
+                const canonicalUser = toCanonicalUser(user)
                 const mapped: UnifiedUserProfile = {
                     name: `${user.first_name || user.firstName || ""} ${user.last_name || user.lastName || ""}`.trim(),
                     email: user.email,
@@ -63,17 +77,12 @@ export default function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
                 }
 
                 try {
-                    console.log("[LoginForm] Attempting to store encrypted user data")
-                    // Store encrypted user data ONLY
-                    setEncryptedUser(mapped, !rememberMe)
-                    console.log("[LoginForm] Encrypted user data stored successfully")
+                    setEncryptedUser(canonicalUser, !rememberMe)
                 } catch (e) {
-                    console.error("[LoginForm] Failed to store encrypted data:", e)
-                    // Fallback to unencrypted storage
                     if (rememberMe) {
-                        localStorage.setItem("meritcap_user", JSON.stringify(mapped))
+                        localStorage.setItem("meritcap_user", JSON.stringify(canonicalUser))
                     } else {
-                        sessionStorage.setItem("meritcap_user", JSON.stringify(mapped))
+                        sessionStorage.setItem("meritcap_user", JSON.stringify(canonicalUser))
                     }
                 }
 

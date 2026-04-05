@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, CheckCircle, XCircle } from "lucide-react"
 import { handleGoogleCallback } from "@/lib/api/client"
-import { setToken } from "@/lib/auth"
+import { saveToken, saveRefreshToken } from "@/lib/auth"
 import { setEncryptedUser } from "@/lib/encryption"
 
 export default function AuthCallbackPage() {
@@ -16,6 +16,19 @@ export default function AuthCallbackPage() {
   // Prevent duplicate API calls (React StrictMode runs useEffect twice)
   const isProcessingRef = useRef(false)
   const processedCodeRef = useRef<string | null>(null)
+
+  const toCanonicalUser = (apiUser: any) => ({
+    user_id: apiUser.user_id,
+    first_name: apiUser.first_name || "",
+    last_name: apiUser.last_name || "",
+    email: apiUser.email || "",
+    username: apiUser.username || "",
+    phone_number: apiUser.phone_number || "",
+    role: apiUser.role || "",
+    profile_picture: apiUser.profile_picture || "",
+    profile_incomplete: apiUser.profile_incomplete || false,
+    login_time: new Date().toISOString(),
+  })
 
   useEffect(() => {
     const processCallback = async () => {
@@ -62,21 +75,19 @@ export default function AuthCallbackPage() {
         if (response.success && response.response) {
           const userData = response.response
 
-          // Store tokens
-          if (userData.id_token) {
-            setToken(userData.id_token)
-          }
+          const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+
+          // Store API access token used by backend-protected routes
           if (userData.access_token) {
-            localStorage.setItem("meritcap_access_token", userData.access_token)
+            saveToken(userData.access_token, rememberMe)
           }
           if (userData.refresh_token) {
-            localStorage.setItem("meritcap_refresh_token", userData.refresh_token)
+            saveRefreshToken(userData.refresh_token, rememberMe)
           }
 
-          // Store user data using encryption
+          // Store canonical user data using encryption
           if (userData.user) {
-            const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
-            setEncryptedUser(userData.user, !rememberMe)
+            setEncryptedUser(toCanonicalUser(userData.user), !rememberMe)
           }
 
           setStatus("success")

@@ -76,40 +76,54 @@ export function decryptData(encryptedData: string): any {
  */
 export function setEncryptedUser(userData: any, useSessionStorage = false): void {
   try {
-    console.log("[Encryption] Starting encryption for user data", { 
-      hasEmail: !!userData?.email,
-      useSessionStorage 
-    })
-    
-    // Create a clean copy to avoid circular references
+    // Create a canonical, backward-compatible copy
+    const normalizedUserId =
+      userData.userId ||
+      userData.user_id ||
+      userData.id ||
+      (typeof userData.studentId === "string" ? Number.parseInt(userData.studentId.replace(/\D/g, ""), 10) : undefined)
+
+    const normalizedFirstName =
+      userData.firstName ||
+      userData.first_name ||
+      (typeof userData.name === "string" ? userData.name.split(" ").slice(0, 1).join(" ") : "")
+
+    const normalizedLastName =
+      userData.lastName ||
+      userData.last_name ||
+      (typeof userData.name === "string" ? userData.name.split(" ").slice(1).join(" ") : "")
+
     const cleanUserData = {
-      userId: userData.userId || userData.user_id,
-      firstName: userData.firstName || userData.first_name,
-      lastName: userData.lastName || userData.last_name,
-      email: userData.email,
-      username: userData.username,
-      phoneNumber: userData.phoneNumber || userData.phone_number,
-      profilePicture: userData.profilePicture || userData.profile_picture,
-      role: userData.role,
-      profileIncomplete: userData.profileIncomplete || userData.profile_incomplete || false
+      userId: normalizedUserId,
+      user_id: normalizedUserId,
+      firstName: normalizedFirstName,
+      first_name: normalizedFirstName,
+      lastName: normalizedLastName,
+      last_name: normalizedLastName,
+      email: userData.email || "",
+      username: userData.username || "",
+      phoneNumber: userData.phoneNumber || userData.phone_number || userData.phone || "",
+      phone_number: userData.phoneNumber || userData.phone_number || userData.phone || "",
+      profilePicture: userData.profilePicture || userData.profile_picture || "",
+      profile_picture: userData.profilePicture || userData.profile_picture || "",
+      role: userData.role || "",
+      profileIncomplete: userData.profileIncomplete || userData.profile_incomplete || false,
+      profile_incomplete: userData.profileIncomplete || userData.profile_incomplete || false
     }
     
     const encrypted = encryptData(cleanUserData)
-    console.log("[Encryption] Data encrypted successfully, length:", encrypted.length)
     
     if (useSessionStorage) {
       sessionStorage.setItem("meritcap_user_secure", encrypted)
-      console.log("[Encryption] Stored in sessionStorage as 'meritcap_user_secure'")
     } else {
       localStorage.setItem("meritcap_user_secure", encrypted)
-      console.log("[Encryption] Stored in localStorage as 'meritcap_user_secure'")
     }
-    
-    // Verify it was stored
-    const stored = useSessionStorage 
-      ? sessionStorage.getItem("meritcap_user_secure")
-      : localStorage.getItem("meritcap_user_secure")
-    console.log("[Encryption] Verification - Data stored successfully:", !!stored)
+
+    if (useSessionStorage) {
+      sessionStorage.removeItem("meritcap_user")
+    } else {
+      localStorage.removeItem("meritcap_user")
+    }
   } catch (error) {
     console.error("[Encryption] Failed to store encrypted user data:", error)
   }
@@ -130,15 +144,11 @@ export function getEncryptedUser(): any {
       storageType = "sessionStorage"
     }
     
-    console.log("[Encryption] Retrieving encrypted data from:", storageType, "Found:", !!encrypted)
-    
     if (!encrypted) {
-      console.log("[Encryption] No encrypted data found")
       return null
     }
     
     const decrypted = decryptData(encrypted)
-    console.log("[Encryption] Data decrypted successfully:", !!decrypted)
     
     return decrypted
   } catch (error) {

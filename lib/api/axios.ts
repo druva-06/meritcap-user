@@ -104,7 +104,7 @@ instance.interceptors.response.use(
             
             // Fallback to unencrypted
             if (!parsed) {
-              const raw = localStorage.getItem("meritcap_user")
+              const raw = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
               if (raw) {
                 parsed = JSON.parse(raw)
               }

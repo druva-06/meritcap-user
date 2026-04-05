@@ -3,6 +3,39 @@ import type { LoginRequest, LoginApiResponse } from "./types"
 import { getToken } from "@/lib/auth"
 import { getEncryptedUser } from "@/lib/encryption"
 
+function resolveCurrentUserIdFromStorage(): number | null {
+  if (typeof window === "undefined") return null
+  try {
+    let userData = getEncryptedUser()
+    if (!userData) {
+      const userString = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
+      if (userString) {
+        userData = JSON.parse(userString)
+      }
+    }
+    if (!userData) return null
+
+    const directId = userData?.user_id ?? userData?.userId ?? userData?.id ?? userData?.student_id
+    if (typeof directId === "number" && !Number.isNaN(directId)) return directId
+    if (typeof directId === "string" && directId.trim() !== "") {
+      const parsed = Number.parseInt(directId, 10)
+      if (!Number.isNaN(parsed)) return parsed
+    }
+
+    if (userData?.studentId) {
+      const studentIdStr = String(userData.studentId)
+      const numericMatch = studentIdStr.match(/\d+/)
+      if (numericMatch) {
+        const parsed = Number.parseInt(numericMatch[0], 10)
+        if (!Number.isNaN(parsed)) return parsed
+      }
+    }
+  } catch (e) {
+    console.warn("Could not resolve user ID from storage:", e)
+  }
+  return null
+}
+
 export async function login(data: LoginRequest): Promise<LoginApiResponse> {
   try {
     const res = await axios.post<LoginApiResponse>("/api/auth/login", data)
@@ -283,48 +316,11 @@ export async function getStudentRegistrations(studentId: number): Promise<any> {
 // Student Education APIs
 export async function getStudentEducation(userId?: number): Promise<any> {
   try {
-    let id = userId
-
-    // If userId not provided, try to get from localStorage
-    if (!id && typeof window !== "undefined") {
-      try {
-        // Try encrypted storage first
-        let userData = getEncryptedUser()
-        
-        // Fallback to unencrypted if needed
-        if (!userData) {
-          const userString = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
-          if (userString) {
-            userData = JSON.parse(userString)
-          }
-        }
-        
-        if (userData) {
-          // Try to get student ID from different possible fields
-          // First check for numeric IDs
-          id = userData?.user_id || userData?.id || userData?.userId || userData?.student_id
-          
-          // If not found or still no ID, try to extract from studentId field (e.g., "WC15" → 15)
-          if (!id && userData?.studentId) {
-            const studentIdStr = String(userData.studentId)
-            // Extract numeric part from studentId (e.g., "WC15" → "15")
-            const numericMatch = studentIdStr.match(/\d+/)
-            if (numericMatch) {
-              id = parseInt(numericMatch[0], 10)
-              console.log("Extracted user ID from studentId:", userData.studentId, "→", id)
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Could not get user ID from storage:", e)
-      }
-    }
+    const id = userId ?? resolveCurrentUserIdFromStorage()
 
     if (!id) {
       throw new Error("User ID not found. Please login again.")
     }
-
-    console.log("Fetching education for userId:", id)
 
     const res = await axios.get(`/api/student-education/get`, {
       params: { userId: id }
@@ -338,44 +334,11 @@ export async function getStudentEducation(userId?: number): Promise<any> {
 
 export async function createStudentEducation(educationData: any): Promise<any> {
   try {
-    let userId = educationData.userId
-
-    // If userId not provided, try to get from localStorage
-    if (!userId && typeof window !== "undefined") {
-      try {
-        // Try encrypted storage first
-        let userData = getEncryptedUser()
-        
-        // Fallback to unencrypted if needed
-        if (!userData) {
-          const userString = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
-          if (userString) {
-            userData = JSON.parse(userString)
-          }
-        }
-        
-        if (userData) {
-          userId = userData?.user_id || userData?.id || userData?.userId || userData?.student_id
-          
-          if (!userId && userData?.studentId) {
-            const studentIdStr = String(userData.studentId)
-            const numericMatch = studentIdStr.match(/\d+/)
-            if (numericMatch) {
-              userId = parseInt(numericMatch[0], 10)
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Could not get user ID from storage:", e)
-      }
-    }
+    const userId = educationData.userId ?? resolveCurrentUserIdFromStorage()
 
     if (!userId) {
       throw new Error("User ID not found. Please login again.")
     }
-
-    // Don't include userId in payload, send it as query parameter
-    console.log("Creating education for userId:", userId, "Payload:", educationData)
 
     const res = await axios.post(`/api/student-education/add`, educationData, {
       params: { userId }
@@ -389,8 +352,6 @@ export async function createStudentEducation(educationData: any): Promise<any> {
 
 export async function updateStudentEducation(educationId: number, educationData: any): Promise<any> {
   try {
-    console.log("Updating education:", educationId, educationData)
-
     const res = await axios.put(`/api/student-education/update`, educationData, {
       params: { educationId }
     })
@@ -403,8 +364,6 @@ export async function updateStudentEducation(educationId: number, educationData:
 
 export async function deleteStudentEducation(educationId: number): Promise<any> {
   try {
-    console.log("Deleting education:", educationId)
-
     const res = await axios.delete(`/api/student-education/delete`, {
       params: { educationId }
     })
@@ -443,45 +402,11 @@ export async function uploadProfileImage(file: File): Promise<any> {
 // Student Profile API
 export async function getStudentProfile(userId?: number): Promise<any> {
   try {
-    let id = userId
-
-    // If userId not provided, try to get from localStorage
-    if (!id && typeof window !== "undefined") {
-      try {
-        // Try encrypted storage first
-        let userData = getEncryptedUser()
-        
-        // Fallback to unencrypted if needed
-        if (!userData) {
-          const userString = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
-          if (userString) {
-            userData = JSON.parse(userString)
-          }
-        }
-        
-        if (userData) {
-          // Try to get user ID from different possible fields
-          id = userData?.user_id || userData?.id || userData?.userId
-          
-          // If not found, try to extract from studentId field (e.g., "WC15" → 15)
-          if (!id && userData?.studentId) {
-            const studentIdStr = String(userData.studentId)
-            const numericMatch = studentIdStr.match(/\d+/)
-            if (numericMatch) {
-              id = parseInt(numericMatch[0], 10)
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Could not get user ID from storage:", e)
-      }
-    }
+    const id = userId ?? resolveCurrentUserIdFromStorage()
 
     if (!id) {
       throw new Error("User ID not found. Please login again.")
     }
-
-    console.log("Fetching profile for userId:", id)
 
     const res = await axios.get(`/api/student/profile`, {
       params: { userId: id }
@@ -500,45 +425,11 @@ export async function updateStudentProfile(data: {
   graduation_level: string
 }, userId?: number): Promise<any> {
   try {
-    let id = userId
-
-    // If userId not provided, try to get from localStorage
-    if (!id && typeof window !== "undefined") {
-      try {
-        // Try encrypted storage first
-        let userData = getEncryptedUser()
-        
-        // Fallback to unencrypted if needed
-        if (!userData) {
-          const userString = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
-          if (userString) {
-            userData = JSON.parse(userString)
-          }
-        }
-        
-        if (userData) {
-          // Try to get user ID from different possible fields
-          id = userData?.user_id || userData?.id || userData?.userId
-          
-          // If not found, try to extract from studentId field (e.g., "WC15" → 15)
-          if (!id && userData?.studentId) {
-            const studentIdStr = String(userData.studentId)
-            const numericMatch = studentIdStr.match(/\d+/)
-            if (numericMatch) {
-              id = parseInt(numericMatch[0], 10)
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Could not get user ID from storage:", e)
-      }
-    }
+    const id = userId ?? resolveCurrentUserIdFromStorage()
 
     if (!id) {
       throw new Error("User ID not found. Please login again.")
     }
-
-    console.log("Updating profile for userId:", id, "with data:", data)
 
     const res = await axios.put(`/api/student/profile`, data, {
       params: { userId: id }

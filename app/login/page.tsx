@@ -32,6 +32,19 @@ export default function LoginPage() {
     rememberMe: false,
   })
 
+  const toCanonicalUser = (apiUser: any) => ({
+    user_id: apiUser.user_id,
+    first_name: apiUser.first_name || "",
+    last_name: apiUser.last_name || "",
+    email: apiUser.email || "",
+    username: apiUser.username || "",
+    phone_number: apiUser.phone_number || "",
+    role: apiUser.role || "",
+    profile_picture: apiUser.profile_picture || "",
+    profile_incomplete: apiUser.profile_incomplete || false,
+    login_time: new Date().toISOString(),
+  })
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target
     setFormData((prev) => ({
@@ -112,8 +125,9 @@ export default function LoginPage() {
           if (res.response.refresh_token) setRefreshToken(res.response.refresh_token)
         }
 
-        // save minimal user info
+        // save minimal user info for UI + canonical user for persisted session
         const user = res.response.user
+        const canonicalUser = toCanonicalUser(user)
         const mapped: UnifiedUserProfile = {
           name: `${user.first_name} ${user.last_name}`,
           email: user.email,
@@ -139,17 +153,13 @@ export default function LoginPage() {
 
         setUserData(mapped)
         try {
-          console.log("[Login] Attempting to store encrypted user data")
-          // Store encrypted user data ONLY
-          setEncryptedUser(mapped, !formData.rememberMe)
-          console.log("[Login] Encrypted user data stored successfully")
+          setEncryptedUser(canonicalUser, !formData.rememberMe)
         } catch (e) {
-          console.error("[Login] Failed to store encrypted data:", e)
           // Fallback to unencrypted storage
           if (formData.rememberMe) {
-            localStorage.setItem("meritcap_user", JSON.stringify(mapped))
+            localStorage.setItem("meritcap_user", JSON.stringify(canonicalUser))
           } else {
-            sessionStorage.setItem("meritcap_user", JSON.stringify(mapped))
+            sessionStorage.setItem("meritcap_user", JSON.stringify(canonicalUser))
           }
         }
         // Notify other components in the same window to refresh auth state
