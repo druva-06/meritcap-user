@@ -19,6 +19,7 @@ import { AuthLoadingView, SearchLoadingSkeleton, SearchEmptyState } from "@/comp
 import type { UnifiedUserProfile } from "@/types/user"
 import { toast } from "@/hooks/use-toast"
 import { addWishlistItem, startCourseRegistration } from "@/lib/api/client"
+import { resolveCurrentUserId } from "@/lib/user-identity"
 import {
   mapLevelsToApi,
   mapCountriesToApi,
@@ -372,10 +373,7 @@ function SearchResultsContent() {
       if (wishlistLoading[key]) return
       setWishlistLoading((prev) => ({ ...prev, [key]: true }))
 
-      // Extract numeric student id if stored as "WC123"
-      const rawStudentId = userData.studentId || ""
-      const numericPart = rawStudentId ? Number(String(rawStudentId).replace(/\D+/g, "")) : NaN
-      const studentIdForApi = Number.isFinite(numericPart) && numericPart > 0 ? numericPart : undefined
+      const studentIdForApi = resolveCurrentUserId(userData) || undefined
 
       if (!studentIdForApi) {
         toast({ title: "Profile issue", description: "Cannot determine your student ID.", variant: "destructive" })
@@ -681,10 +679,7 @@ function SearchResultsContent() {
     setIsSubmittingApplication(true)
 
     try {
-      // Extract numeric student id
-      const rawStudentId = userData?.studentId || ""
-      const numericPart = rawStudentId ? Number(String(rawStudentId).replace(/\D+/g, "")) : NaN
-      const studentIdForApi = Number.isFinite(numericPart) && numericPart > 0 ? numericPart : undefined
+      const studentIdForApi = resolveCurrentUserId(userData) || undefined
 
       if (!studentIdForApi) {
         toast({

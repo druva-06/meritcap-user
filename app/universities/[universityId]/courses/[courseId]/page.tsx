@@ -40,6 +40,7 @@ import { Loader } from "lucide-react"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
 import { toast } from "@/hooks/use-toast"
 import type { UnifiedUserProfile } from "@/types/user"
+import { resolveCurrentUserId } from "@/lib/user-identity"
 
 export default function CourseDetailPage() {
   const params = useParams()
@@ -383,10 +384,7 @@ export default function CourseDetailPage() {
     setIsSubmittingApplication(true)
 
     try {
-      // Extract numeric student id
-      const rawStudentId = userData?.studentId || ""
-      const numericPart = rawStudentId ? Number(String(rawStudentId).replace(/\D+/g, "")) : NaN
-      const studentIdForApi = Number.isFinite(numericPart) && numericPart > 0 ? numericPart : undefined
+      const studentIdForApi = resolveCurrentUserId(userData) || undefined
 
       if (!studentIdForApi) {
         toast({

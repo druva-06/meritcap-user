@@ -52,6 +52,7 @@ import { toast } from "@/hooks/use-toast"
 import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
 import { getWishlistItems, removeWishlistItem, uploadDocument, getDocumentsList, deleteDocument, startCourseRegistration, getStudentRegistrations } from "@/lib/api/client"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
+import { resolveCurrentUserId } from "@/lib/user-identity"
 
 
 interface Application {
@@ -1096,9 +1097,8 @@ export default function DashboardPage() {
   const loadWishlist = useCallback(async () => {
     const isShortlistMySaved = activeTab === "shortlist" && activeSubTab === "my-saved"
     if (!isShortlistMySaved) return
-    if (!user?.studentId) return
-    const numericStudentId = Number(String(user.studentId).replace(/\D+/g, ""))
-    if (!Number.isFinite(numericStudentId) || numericStudentId <= 0) return
+    const numericStudentId = resolveCurrentUserId(user)
+    if (!numericStudentId) return
 
     try {
       setWishlistLoading(true)
@@ -1131,7 +1131,7 @@ export default function DashboardPage() {
     } finally {
       setWishlistLoading(false)
     }
-  }, [activeTab, activeSubTab, user?.studentId])
+  }, [activeTab, activeSubTab, user])
 
   useEffect(() => {
     loadWishlist()
@@ -1142,9 +1142,8 @@ export default function DashboardPage() {
     const isApplicationsTab = activeTab === "applications" &&
       ["pending", "submitted", "accepted", "rejected"].includes(activeSubTab)
     if (!isApplicationsTab) return
-    if (!user?.studentId) return
-    const numericStudentId = Number(String(user.studentId).replace(/\D+/g, ""))
-    if (!Number.isFinite(numericStudentId) || numericStudentId <= 0) return
+    const numericStudentId = resolveCurrentUserId(user)
+    if (!numericStudentId) return
 
     try {
       setIsLoadingRegistrations(true)
@@ -1162,7 +1161,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingRegistrations(false)
     }
-  }, [activeTab, activeSubTab, user?.studentId])
+  }, [activeTab, activeSubTab, user])
 
   useEffect(() => {
     loadRegistrations()
@@ -1283,27 +1282,9 @@ export default function DashboardPage() {
       parsedUserData = userData ? JSON.parse(userData) : null
     }
 
-    // Get user ID - try multiple fields
-    const userId = parsedUserData?.studentId || parsedUserData?.id || user?.studentId || (user as any)?.id
-
-    if (!userId) {
+    const numericId = resolveCurrentUserId(parsedUserData || user)
+    if (!numericId) {
       setDocumentsError("User ID not available")
-      return
-    }
-
-    // Extract numeric ID from studentId (e.g., "WC15" -> 15)
-    let numericId: number
-    if (typeof userId === "string" && userId.startsWith("WC")) {
-      const numPart = userId.replace(/^WC/, "")
-      numericId = Number.parseInt(numPart, 10)
-    } else if (typeof userId === "number") {
-      numericId = userId
-    } else {
-      numericId = Number.parseInt(String(userId), 10)
-    }
-
-    if (isNaN(numericId)) {
-      setDocumentsError("Invalid user ID format")
       return
     }
 
@@ -1711,35 +1692,11 @@ export default function DashboardPage() {
         parsedUserData = userData ? JSON.parse(userData) : null
       }
 
-      // Get user ID - try multiple fields
-      const userId = parsedUserData?.studentId || parsedUserData?.id || user?.studentId || (user as any)?.id
-
-      if (!userId) {
+      const numericId = resolveCurrentUserId(parsedUserData || user)
+      if (!numericId) {
         setDocumentError("User information not available. Please login again.")
         setLoading(false)
         return
-      }
-
-      // Extract numeric ID from studentId (e.g., "WC15" -> 15)
-      let numericId: number
-      if (typeof userId === "string" && userId.startsWith("WC")) {
-        // Extract number from "WC15" format
-        const numPart = userId.replace(/^WC/, "")
-        numericId = Number.parseInt(numPart, 10)
-        if (isNaN(numericId)) {
-          setDocumentError("Invalid student ID format")
-          setLoading(false)
-          return
-        }
-      } else if (typeof userId === "number") {
-        numericId = userId
-      } else {
-        numericId = Number.parseInt(String(userId), 10)
-        if (isNaN(numericId)) {
-          setDocumentError("Invalid user ID format")
-          setLoading(false)
-          return
-        }
       }
 
       // Get user role from localStorage or default to STUDENT
@@ -2146,10 +2103,7 @@ export default function DashboardPage() {
     setIsSubmittingApplication(true)
 
     try {
-      // Extract numeric student id from user data
-      const rawStudentId = user?.studentId || ""
-      const numericPart = rawStudentId ? Number(String(rawStudentId).replace(/\D+/g, "")) : NaN
-      const studentIdForApi = Number.isFinite(numericPart) && numericPart > 0 ? numericPart : undefined
+      const studentIdForApi = resolveCurrentUserId(user) || undefined
 
       if (!studentIdForApi) {
         showToast("Profile Issue", "Cannot determine your student ID. Please complete your profile.")
@@ -2243,12 +2197,8 @@ export default function DashboardPage() {
                       // Remove
                       if (isSaved) {
                         try {
-                          if (!user?.studentId) {
-                            showToast("Login required", "Please login to modify your wishlist")
-                            return
-                          }
-                          const sid = Number(String(user.studentId).replace(/\D+/g, ""))
-                          if (!Number.isFinite(sid) || sid <= 0) {
+                          const sid = resolveCurrentUserId(user)
+                          if (!sid) {
                             showToast("Invalid account", "Could not read your student ID")
                             return
                           }
