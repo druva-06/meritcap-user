@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import LoginForm from "@/components/auth/login-form"
 import { User, Phone, Mail, Sparkles, MessageCircle } from "lucide-react"
 import { setEncryptedUser } from "@/lib/encryption"
+import { getRememberMePreference } from "@/lib/auth-session"
 
 interface AuthLoginModalProps {
   isOpen: boolean
@@ -64,7 +65,7 @@ export function AuthLoginModal({ isOpen, onClose, onLoginComplete }: AuthLoginMo
         isNewUser: true,
       }
 
-      const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+      const rememberMe = getRememberMePreference()
       setEncryptedUser(userData, !rememberMe)
       onLoginComplete(userData)
       setLoading(false)
@@ -85,7 +86,7 @@ export function AuthLoginModal({ isOpen, onClose, onLoginComplete }: AuthLoginMo
         avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face",
       }
 
-      const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+      const rememberMe = getRememberMePreference()
       setEncryptedUser(userData, !rememberMe)
       onLoginComplete(userData)
       setLoading(false)

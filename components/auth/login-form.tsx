@@ -10,6 +10,7 @@ import { saveToken, saveRefreshToken } from "@/lib/auth"
 import type { LoginRequest } from "@/lib/api/types"
 import type { UnifiedUserProfile } from "@/types/user"
 import { setEncryptedUser } from "@/lib/encryption"
+import { setRememberMePreference } from "@/lib/auth-session"
 
 interface LoginFormProps {
     onSuccess?: (user: UnifiedUserProfile) => void
@@ -44,6 +45,7 @@ export default function LoginForm({ onSuccess, onCancel }: LoginFormProps) {
             const res = await loginApi(payload)
 
             if (res?.success && res?.response?.access_token) {
+                setRememberMePreference(rememberMe)
                 // save tokens
                 try {
                     saveToken(res.response.access_token, rememberMe)

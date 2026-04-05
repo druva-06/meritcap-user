@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Eye, EyeOff, User, CheckCircle, Upload, FileText, Clock, Shield, Zap, Loader2, Mail, Phone, Lock, UserPlus, Sparkles, ArrowRight, Globe } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { getGoogleAuthUrl } from "@/lib/api/client"
+import { savePendingSignup, setRememberMePreference } from "@/lib/auth-session"
 
 export default function SignupPage() {
   const router = useRouter()
@@ -66,6 +67,8 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setGoogleLoading(true)
     try {
+      setRememberMePreference(false)
+
       // Get redirect URI for the callback
       const redirectUri = typeof window !== "undefined" 
         ? `${window.location.origin}/auth/callback` 
@@ -144,6 +147,8 @@ export default function SignupPage() {
 
     setIsLoading(true)
     try {
+      setRememberMePreference(false)
+
       // Build request body as required by backend
       // Ensure phone number includes country code
       const normalizedPhone = formData.phone.startsWith("+")
@@ -165,6 +170,14 @@ export default function SignupPage() {
 
       // Backend expected to return success message or created user
       if (res && (res.success || res.id || res.user)) {
+        savePendingSignup({
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          username: formData.username,
+          phoneNumber: normalizedPhone,
+        })
         // Redirect user to email confirmation page (backend sends OTP automatically)
         toast({ title: "Account Created", description: res?.message || "Please check your email for the verification code." })
         setIsLoading(false)

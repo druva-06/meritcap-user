@@ -64,8 +64,12 @@ export function Header() {
 
         if (user) {
           setIsLoggedIn(true)
-          setUserName(user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "User")
-          setProfilePicture(user.profile_picture || "")
+          setUserName(
+            user.name ||
+            `${user.first_name || user.firstName || ""} ${user.last_name || user.lastName || ""}`.trim() ||
+            "User"
+          )
+          setProfilePicture(user.profile_picture || user.profilePicture || "")
           return
         }
 
@@ -93,7 +97,13 @@ export function Header() {
 
     // Listen for storage changes (when user logs in from other components)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "meritcap_user") {
+      const watchedKeys = new Set([
+        "meritcap_user",
+        "meritcap_user_secure",
+        "meritcap_access_token",
+        "meritcap_refresh_token",
+      ])
+      if (!e.key || watchedKeys.has(e.key)) {
         checkAuthState()
       }
     }

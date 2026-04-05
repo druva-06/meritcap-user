@@ -17,6 +17,7 @@ import { login as loginApi, getGoogleAuthUrl } from "@/lib/api/client"
 import { setToken, setRefreshToken } from "@/lib/auth"
 import type { LoginRequest } from "@/lib/api/types"
 import { setEncryptedUser } from "@/lib/encryption"
+import { setRememberMePreference } from "@/lib/auth-session"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -57,7 +58,7 @@ export default function LoginPage() {
     setGoogleLoading(true)
     try {
       // Store remember me preference for use after callback
-      localStorage.setItem("meritcap_remember_me", formData.rememberMe.toString())
+      setRememberMePreference(formData.rememberMe)
 
       // Get redirect URI for the callback
       const redirectUri = typeof window !== "undefined" 
@@ -113,6 +114,7 @@ export default function LoginPage() {
         }
         // store tokens according to rememberMe
         const remember = formData.rememberMe
+        setRememberMePreference(remember)
         // use helper that writes to localStorage or sessionStorage
         try {
           // save tokens to chosen storage

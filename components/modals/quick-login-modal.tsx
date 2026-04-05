@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { XCircle, Loader2 } from "lucide-react"
 import { getGoogleAuthUrl } from "@/lib/api/client"
+import { setRememberMePreference } from "@/lib/auth-session"
 
 interface QuickLoginModalProps {
   isOpen: boolean
@@ -23,6 +24,8 @@ export function QuickLoginModal({ isOpen, onClose, onLoginComplete, pendingSearc
     setError("")
 
     try {
+      setRememberMePreference(false)
+
       // Store pending search params so we can resume after OAuth callback
       if (pendingSearchParams) {
         localStorage.setItem("meritcap_pending_search", pendingSearchParams)

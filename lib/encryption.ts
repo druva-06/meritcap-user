@@ -124,6 +124,12 @@ export function setEncryptedUser(userData: any, useSessionStorage = false): void
     } else {
       localStorage.removeItem("meritcap_user")
     }
+
+    try {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("authStateChanged"))
+      }
+    } catch (e) { }
   } catch (error) {
     console.error("[Encryption] Failed to store encrypted user data:", error)
   }

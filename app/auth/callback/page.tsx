@@ -6,6 +6,7 @@ import { Loader2, CheckCircle, XCircle } from "lucide-react"
 import { handleGoogleCallback } from "@/lib/api/client"
 import { saveToken, saveRefreshToken } from "@/lib/auth"
 import { setEncryptedUser } from "@/lib/encryption"
+import { getRememberMePreference } from "@/lib/auth-session"
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -75,7 +76,7 @@ export default function AuthCallbackPage() {
         if (response.success && response.response) {
           const userData = response.response
 
-          const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+          const rememberMe = getRememberMePreference()
 
           // Store API access token used by backend-protected routes
           if (userData.access_token) {

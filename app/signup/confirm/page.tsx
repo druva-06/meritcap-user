@@ -8,6 +8,15 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { login as loginApi } from "@/lib/api/client"
+import { saveToken, saveRefreshToken } from "@/lib/auth"
+import { setEncryptedUser } from "@/lib/encryption"
+import {
+    clearPendingSignup,
+    dispatchAuthStateChanged,
+    getPendingSignup,
+    getRememberMePreference,
+} from "@/lib/auth-session"
 
 export default function SignupConfirmPage() {
     const router = useRouter()
@@ -19,6 +28,19 @@ export default function SignupConfirmPage() {
     const [loading, setLoading] = useState(false)
     const [resendTimer, setResendTimer] = useState(30)
     const [canResend, setCanResend] = useState(false)
+
+    const toCanonicalUser = (apiUser: any) => ({
+        user_id: apiUser.user_id,
+        first_name: apiUser.first_name || "",
+        last_name: apiUser.last_name || "",
+        email: apiUser.email || "",
+        username: apiUser.username || "",
+        phone_number: apiUser.phone_number || "",
+        role: apiUser.role || "",
+        profile_picture: apiUser.profile_picture || "",
+        profile_incomplete: apiUser.profile_incomplete || false,
+        login_time: new Date().toISOString(),
+    })
 
     useEffect(() => {
         if (prefillEmail) setEmail(prefillEmail)
@@ -56,6 +78,32 @@ export default function SignupConfirmPage() {
             const res = await confirmVerificationCode(email, code)
 
             if (res && (res.success || res.statusCode === 200)) {
+                const normalizedEmail = email.trim().toLowerCase()
+                const rememberMe = getRememberMePreference(false)
+                const pendingSignup = getPendingSignup()
+
+                if (pendingSignup?.email === normalizedEmail && pendingSignup.password) {
+                    const loginRes = await loginApi({ email: normalizedEmail, password: pendingSignup.password })
+
+                    if (loginRes?.success && loginRes?.response?.access_token) {
+                        saveToken(loginRes.response.access_token, rememberMe)
+                        if (loginRes.response.refresh_token) {
+                            saveRefreshToken(loginRes.response.refresh_token, rememberMe)
+                        }
+
+                        if (loginRes.response.user) {
+                            setEncryptedUser(toCanonicalUser(loginRes.response.user), !rememberMe)
+                        }
+
+                        dispatchAuthStateChanged()
+                        clearPendingSignup()
+                        toast({ title: "Verified", description: "Account verified and logged in successfully." })
+                        router.push("/")
+                        return
+                    }
+                }
+
+                clearPendingSignup()
                 toast({ title: "Verified", description: res.message || "Account verified" })
                 router.push("/signup/success?email=" + encodeURIComponent(email))
             } else {

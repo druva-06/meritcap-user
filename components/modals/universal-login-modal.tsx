@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { User, Lock, Mail, Phone, Eye, EyeOff, Sparkles } from "lucide-react"
 import { setEncryptedUser } from "@/lib/encryption"
+import { getRememberMePreference } from "@/lib/auth-session"
 
 interface UniversalLoginModalProps {
   isOpen: boolean
@@ -53,7 +54,7 @@ export function UniversalLoginModal({ isOpen, onClose, onComplete }: UniversalLo
       signupTime: new Date().toISOString(),
     }
 
-    const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+    const rememberMe = getRememberMePreference()
     setEncryptedUser(userData, !rememberMe)
     onComplete(userData)
     onClose()
@@ -75,7 +76,7 @@ export function UniversalLoginModal({ isOpen, onClose, onComplete }: UniversalLo
       loginTime: new Date().toISOString(),
     }
 
-    const rememberMe = localStorage.getItem("meritcap_remember_me") === "true"
+    const rememberMe = getRememberMePreference()
     setEncryptedUser(userData, !rememberMe)
     onComplete(userData)
     onClose()
