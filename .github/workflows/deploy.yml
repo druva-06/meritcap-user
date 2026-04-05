@@ -60,14 +60,25 @@ jobs:
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ steps.env.outputs.vps_host }}
           username: deployer
           password: ${{ secrets.DEPLOYER_PASSWORD }}
           timeout: 120s
           command_timeout: 20m
+          envs: GHCR_USER,GHCR_TOKEN
           script: |
             set -e
+            microk8s kubectl create secret docker-registry ghcr-secret \
+              --docker-server=ghcr.io \
+              --docker-username="$GHCR_USER" \
+              --docker-password="$GHCR_TOKEN" \
+              -n ${{ steps.env.outputs.namespace }} \
+              --dry-run=client -o yaml | microk8s kubectl apply -f -
+            microk8s kubectl patch deployment meritcap-user -n ${{ steps.env.outputs.namespace }} --type='merge' -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ghcr-secret"}]}}}}'
             microk8s kubectl patch deployment meritcap-user -n ${{ steps.env.outputs.namespace }} --type='merge' -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxUnavailable":1,"maxSurge":1}}}}'
             microk8s kubectl set image deployment/meritcap-user \
               meritcap-user=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}-${{ github.sha }} \
@@ -76,6 +87,7 @@ jobs:
               microk8s kubectl get deployment meritcap-user -n ${{ steps.env.outputs.namespace }} -o wide
               microk8s kubectl get pods -n ${{ steps.env.outputs.namespace }} -l app=meritcap-user -o wide
               microk8s kubectl describe deployment meritcap-user -n ${{ steps.env.outputs.namespace }}
+              microk8s kubectl describe pods -n ${{ steps.env.outputs.namespace }} -l app=meritcap-user
               exit 1
             fi
             microk8s kubectl get pods -n ${{ steps.env.outputs.namespace }} -l app=meritcap-user
