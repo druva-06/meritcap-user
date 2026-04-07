@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
+import { getProfileDocumentRequirements, getCountryDocumentRequirements, getCountriesForDocConfig } from "@/lib/api/client"
 import {
   Upload,
   FileText,
@@ -235,6 +236,9 @@ export default function DocumentUploadPage({ params }: { params: { applicationId
   const [user, setUser] = useState<any>(null)
   const [customDocName, setCustomDocName] = useState("")
   const [showCustomUpload, setShowCustomUpload] = useState(false)
+  // Dynamic requirements loaded from API
+  const [apiProfileRequirements, setApiProfileRequirements] = useState<any[]>([])
+  const [apiCountryRequirements, setApiCountryRequirements] = useState<any[]>([])
 
   useEffect(() => {
     // Load user data - try encrypted storage first
@@ -262,8 +266,36 @@ export default function DocumentUploadPage({ params }: { params: { applicationId
     }
   }, [params.applicationId, isSetup])
 
-  const initializeSharedDocuments = () => {
-    const templates = getSharedDocumentTemplates()
+  const initializeSharedDocuments = async () => {
+    // Try loading profile requirements from API, fall back to hardcoded
+    let templates: Omit<Document, "id" | "status" | "uploadDate" | "size" | "file">[]
+    try {
+      const res = await getProfileDocumentRequirements()
+      const apiReqs = res?.response || res?.data || []
+      if (Array.isArray(apiReqs) && apiReqs.length > 0) {
+        setApiProfileRequirements(apiReqs)
+        templates = apiReqs.map((r: any) => ({
+          name: r.documentTypeName,
+          fileName: r.documentTypeCode.toLowerCase(),
+          type: "other" as const,
+          required: r.isRequired,
+          description: `${r.documentTypeName} (min: ${r.minCount})`,
+          isShared: true,
+          universitySpecific: false,
+          category: "shared" as const,
+          allowMultiple: r.allowMultiple,
+          documents: [],
+          comments: r.allowMultiple
+            ? `You can upload multiple ${r.documentTypeName} files.`
+            : undefined,
+        }))
+      } else {
+        templates = getSharedDocumentTemplates()
+      }
+    } catch {
+      templates = getSharedDocumentTemplates()
+    }
+
     const docs: Document[] = templates.map((template, index) => ({
       ...template,
       id: `shared-${index}`,
@@ -294,9 +326,69 @@ export default function DocumentUploadPage({ params }: { params: { applicationId
     }
   }
 
-  const initializeDocumentsForApplication = (app: any) => {
-    const sharedTemplates = getSharedDocumentTemplates()
-    const universityTemplates = getUniversitySpecificTemplates(app.university, app.country)
+  const initializeDocumentsForApplication = async (app: any) => {
+    // Fetch profile (shared) requirements from API
+    let sharedTemplates: Omit<Document, "id" | "status" | "uploadDate" | "size" | "file">[]
+    try {
+      const profileRes = await getProfileDocumentRequirements()
+      const profileReqs = profileRes?.response || profileRes?.data || []
+      if (Array.isArray(profileReqs) && profileReqs.length > 0) {
+        setApiProfileRequirements(profileReqs)
+        sharedTemplates = profileReqs.map((r: any) => ({
+          name: r.documentTypeName,
+          fileName: r.documentTypeCode.toLowerCase(),
+          type: "other" as const,
+          required: r.isRequired,
+          description: `${r.documentTypeName} (min: ${r.minCount})`,
+          isShared: true,
+          universitySpecific: false,
+          category: "shared" as const,
+          allowMultiple: r.allowMultiple,
+          documents: [],
+        }))
+      } else {
+        sharedTemplates = getSharedDocumentTemplates()
+      }
+    } catch {
+      sharedTemplates = getSharedDocumentTemplates()
+    }
+
+    // Fetch country-specific requirements from API
+    let universityTemplates: Omit<Document, "id" | "status" | "uploadDate" | "size" | "file">[]
+    try {
+      // Resolve country ID from country name
+      const countriesRes = await getCountriesForDocConfig()
+      const countries: any[] = countriesRes?.response || countriesRes?.data || []
+      const matchedCountry = countries.find(
+        (c: any) => c.name?.toLowerCase() === app.country?.toLowerCase() ||
+                    c.code?.toLowerCase() === app.country?.toLowerCase()
+      )
+      if (matchedCountry) {
+        const countryRes = await getCountryDocumentRequirements(matchedCountry.id)
+        const countryReqs: any[] = countryRes?.response || countryRes?.data || []
+        if (Array.isArray(countryReqs) && countryReqs.length > 0) {
+          setApiCountryRequirements(countryReqs)
+          universityTemplates = countryReqs.map((r: any) => ({
+            name: r.documentTypeName,
+            fileName: r.documentTypeCode.toLowerCase(),
+            type: "other" as const,
+            required: r.isRequired,
+            description: `Required for ${matchedCountry.name} applications (min: ${r.minCount})`,
+            isShared: false,
+            universitySpecific: true,
+            category: "university-specific" as const,
+            allowMultiple: r.allowMultiple,
+            documents: [],
+          }))
+        } else {
+          universityTemplates = getUniversitySpecificTemplates(app.university, app.country)
+        }
+      } else {
+        universityTemplates = getUniversitySpecificTemplates(app.university, app.country)
+      }
+    } catch {
+      universityTemplates = getUniversitySpecificTemplates(app.university, app.country)
+    }
 
     const allDocs: Document[] = [
       ...sharedTemplates.map((template, index) => ({

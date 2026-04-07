@@ -8,6 +8,7 @@ import { studyAbroadUniversities, studyIndiaUniversities, studyOnlineCourses } f
 import { AuthLoginModal } from "@/components/modals/auth-login-modal"
 import { ProfileCompletionModal } from "@/components/modals/profile-completion-modal"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
+import { MissingDocumentsModal, type MissingDocument } from "@/components/modals/missing-documents-modal"
 import { TopBanner } from "@/components/search-results/top-banner"
 import { AdBanner } from "@/components/search-results/ad-banner"
 import { HorizontalFilters } from "@/components/search-results/horizontal-filters"
@@ -18,7 +19,7 @@ import { SearchPagination } from "@/components/search-results/search-pagination"
 import { AuthLoadingView, SearchLoadingSkeleton, SearchEmptyState } from "@/components/search-results/search-results-state-views"
 import type { UnifiedUserProfile } from "@/types/user"
 import { toast } from "@/hooks/use-toast"
-import { addWishlistItem, startCourseRegistration } from "@/lib/api/client"
+import { addWishlistItem, startCourseRegistration, checkDocumentCompliance } from "@/lib/api/client"
 import { resolveCurrentUserId } from "@/lib/user-identity"
 import {
   mapLevelsToApi,
@@ -84,6 +85,9 @@ function SearchResultsContent() {
   const [comparisonList, setComparisonList] = useState<string[]>([])
   const [pendingApplication, setPendingApplication] = useState<{ universityId: string; courseId: string; collegeCourseId: string; intake: string[]; courseName: string; universityName: string } | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [showMissingDocsModal, setShowMissingDocsModal] = useState(false)
+  const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
+  const [missingDocsCountryName, setMissingDocsCountryName] = useState<string>("")
 
   useEffect(() => {
     console.log("[v0] SearchResults: Auth check starting")
@@ -564,6 +568,7 @@ function SearchResultsContent() {
       universityName: item.collegeName || 'Unknown University',
       location: `${item.campusName || ''}, ${item.country || ''}`,
       country: item.country || 'Unknown Country',
+      countryId: item.countryId ?? item.country_id ?? null,
       city: item.campusName || item.city || 'Unknown City',
       fee: Number(item.tuitionFee) || 0,
       duration: item.duration || '2 years',
@@ -634,7 +639,7 @@ function SearchResultsContent() {
 
   const areFiltersActive = searchQuery !== "" || JSON.stringify(filters) !== JSON.stringify(initialFilters)
 
-  const handleApplyNow = (course: any) => {
+  const handleApplyNow = async (course: any) => {
     const searchData = {
       query: searchQuery,
       vertical: vertical,
@@ -657,6 +662,29 @@ function SearchResultsContent() {
       intakeMonths = course.intake
     } else if (typeof course.intake === 'string') {
       intakeMonths = course.intake.split(/[,\s]+/).filter(Boolean)
+    }
+
+    // Pre-check document compliance
+    try {
+      const studentIdForApi = resolveCurrentUserId(userData)
+      if (studentIdForApi && course.countryId) {
+        const complianceResponse = await checkDocumentCompliance(studentIdForApi, course.countryId)
+
+        // ApiSuccessResponse wraps data in the "response" field
+        const complianceData = complianceResponse?.response ?? complianceResponse?.data
+
+        if (complianceResponse?.success && !complianceData?.compliant) {
+          const missing = (complianceData?.missingDocuments ?? []) as MissingDocument[]
+          setMissingDocuments(missing)
+          sessionStorage.setItem("missing_doc_codes", JSON.stringify(missing.map((d) => d.documentTypeCode)))
+          setMissingDocsCountryName(course.universityName)
+          setShowMissingDocsModal(true)
+          return
+        }
+      }
+    } catch (error: any) {
+      console.error("Error checking document compliance:", error)
+      // Continue with the application flow even if the check fails
     }
 
     // Set pending application with intake data
@@ -890,6 +918,14 @@ function SearchResultsContent() {
         showSuccess={showIntakeSuccess}
         registrationId={successRegistrationId}
         intakeSession={successIntakeSession}
+      />
+
+      <MissingDocumentsModal
+        isOpen={showMissingDocsModal}
+        onClose={() => setShowMissingDocsModal(false)}
+        missingDocuments={missingDocuments}
+        countryName={missingDocsCountryName}
+        autoRedirectOnClose={true}
       />
     </div>
   )

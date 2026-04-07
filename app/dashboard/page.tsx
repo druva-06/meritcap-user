@@ -50,8 +50,9 @@ import {
 import type { UnifiedUserProfile } from "@/types/user"
 import { toast } from "@/hooks/use-toast"
 import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
-import { getWishlistItems, removeWishlistItem, uploadDocument, getDocumentsList, deleteDocument, startCourseRegistration, getStudentRegistrations } from "@/lib/api/client"
+import { getWishlistItems, removeWishlistItem, uploadDocument, getDocumentsList, deleteDocument, startCourseRegistration, getStudentRegistrations, checkDocumentCompliance, getDocumentTypes } from "@/lib/api/client"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
+import { MissingDocumentsModal, type MissingDocument } from "@/components/modals/missing-documents-modal"
 import { resolveCurrentUserId } from "@/lib/user-identity"
 
 
@@ -145,6 +146,7 @@ type WishlistItem = {
   courseName: string
   campusName: string
   tuitionFee: string
+  countryId?: number
   intakeMonths: string[]
 }
 
@@ -523,6 +525,13 @@ export default function DashboardPage() {
   const [newDocumentFile, setNewDocumentFile] = useState<File | null>(null)
   const [documentError, setDocumentError] = useState("")
 
+  // Document type selector state
+  const [availableDocTypes, setAvailableDocTypes] = useState<any[]>([])
+  const [selectedDocTypeCode, setSelectedDocTypeCode] = useState<string>("")
+  const [isOtherDocType, setIsOtherDocType] = useState(false)
+  const [otherDocTypeName, setOtherDocTypeName] = useState("")
+  const [missingDocCodes, setMissingDocCodes] = useState<string[]>([])
+
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -561,6 +570,11 @@ export default function DashboardPage() {
   const [showIntakeSuccess, setShowIntakeSuccess] = useState(false)
   const [successRegistrationId, setSuccessRegistrationId] = useState<string>("")
   const [successIntakeSession, setSuccessIntakeSession] = useState<string>("")
+
+  // Missing documents modal state
+  const [showMissingDocsModal, setShowMissingDocsModal] = useState(false)
+  const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
+  const [missingDocsCountryName, setMissingDocsCountryName] = useState<string | undefined>()
 
   // Fetched registrations from API
   const [fetchedRegistrations, setFetchedRegistrations] = useState<any[]>([])
@@ -1119,6 +1133,7 @@ export default function DashboardPage() {
           courseName: item.course_name || item.courseName,
           campusName: item.campus_name || item.campusName,
           tuitionFee: item.tuition_fee || item.tuitionFee,
+          countryId: item.country_id ?? item.countryId ?? undefined,
           intakeMonths: item.intake_months || item.intakeMonths || [],
         }))
         setWishlistItems(items)
@@ -1682,14 +1697,47 @@ export default function DashboardPage() {
     setNewDocumentFile(file)
   }
 
+  const openUploadModal = async () => {
+    // Reset form state
+    setSelectedDocTypeCode("")
+    setIsOtherDocType(false)
+    setOtherDocTypeName("")
+    setNewDocumentRemarks("")
+    setNewDocumentFile(null)
+    setDocumentError("")
+
+    // Load available document types from admin config
+    try {
+      const res = await getDocumentTypes()
+      const types = res?.response || res?.data || []
+      setAvailableDocTypes(Array.isArray(types) ? types.filter((t: any) => t.isActive !== false) : [])
+    } catch {
+      setAvailableDocTypes([])
+    }
+
+    // Read missing doc codes stored by the compliance check
+    try {
+      const stored = sessionStorage.getItem("missing_doc_codes")
+      setMissingDocCodes(stored ? JSON.parse(stored) : [])
+    } catch {
+      setMissingDocCodes([])
+    }
+
+    setAddDocumentOpen(true)
+  }
+
   const addDocument = async () => {
-    if (!newDocumentName.trim()) {
-      setDocumentError("Please enter document name")
+    const effectiveCode = isOtherDocType
+      ? (otherDocTypeName.trim().toUpperCase().replace(/\s+/g, "_") || "OTHER")
+      : selectedDocTypeCode
+
+    if (!effectiveCode) {
+      setDocumentError("Please select a document type")
       return
     }
 
-    if (!newDocumentCategory) {
-      setDocumentError("Please select document category")
+    if (isOtherDocType && !otherDocTypeName.trim()) {
+      setDocumentError("Please enter the document name")
       return
     }
 
@@ -1702,10 +1750,7 @@ export default function DashboardPage() {
       setLoading(true)
       setDocumentError("")
 
-      // Get user data from encrypted storage first
       let parsedUserData = getEncryptedUser()
-
-      // Fallback to unencrypted
       if (!parsedUserData) {
         const userData = localStorage.getItem("meritcap_user")
         parsedUserData = userData ? JSON.parse(userData) : null
@@ -1718,44 +1763,40 @@ export default function DashboardPage() {
         return
       }
 
-      // Get user role from localStorage or default to STUDENT
       const userRole = parsedUserData?.role || parsedUserData?.userType || "STUDENT"
 
-      // Use the document name as documentType (as required by the API)
-      const documentType = newDocumentName.trim().toLowerCase().replace(/\s+/g, "_")
+      // Resolve category from selected doc type
+      const selectedType = availableDocTypes.find((t) => t.code === effectiveCode)
+      const category = isOtherDocType ? "OTHER" : (selectedType?.category || "OTHER")
+      const displayName = isOtherDocType ? otherDocTypeName.trim() : (selectedType?.name || effectiveCode)
 
       const metadata = {
         referenceType: userRole.toUpperCase(),
         referenceId: numericId,
-        documentType: documentType,
-        category: newDocumentCategory,
+        documentType: effectiveCode,
+        category,
         remarks: newDocumentRemarks.trim() || undefined,
       }
 
-      // Call the upload API
       const response = await uploadDocument(newDocumentFile, metadata)
 
       if (response.success || response.status === "success" || !response.error) {
-        // Reset form
-        setNewDocumentName("")
-        setNewDocumentCategory("")
+        setSelectedDocTypeCode("")
+        setIsOtherDocType(false)
+        setOtherDocTypeName("")
         setNewDocumentRemarks("")
         setNewDocumentFile(null)
         setDocumentError("")
         setAddDocumentOpen(false)
 
-        showToast("Document Uploaded", `${newDocumentName} has been uploaded successfully`)
-
-        // Refresh the documents list using the loadDocuments callback
+        showToast("Document Uploaded", `${displayName} has been uploaded successfully`)
         await loadDocuments()
       } else {
         setDocumentError(response.message || response.error || "Failed to upload document. Please try again.")
       }
     } catch (error: any) {
       console.error("Document upload error:", error)
-      setDocumentError(
-        error?.response?.data?.message || error?.message || "Failed to upload document. Please try again."
-      )
+      setDocumentError(error?.response?.data?.message || error?.message || "Failed to upload document. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -2072,16 +2113,71 @@ export default function DashboardPage() {
     return "Manage your Study Journey"
   }
 
-  const handleApplyNowFn = (universityId: string, courseId: string, collegeCourseId?: number, collegeName?: string, courseName?: string, intakeMonths?: string[]) => {
-    // If collegeCourseId is provided (from wishlist), show intake modal
+  // Pre-check document compliance before showing intake modal
+  const checkDocumentComplianceAndApply = async (
+    collegeCourseId: number,
+    collegeName: string,
+    courseName: string,
+    intakeMonths: string[],
+    countryId?: number
+  ) => {
+    try {
+      const studentIdForApi = resolveCurrentUserId(user)
+      if (!studentIdForApi || !countryId) {
+        // No country ID, skip pre-check and proceed directly to intake modal
+        setPendingApplication({
+          collegeCourseId,
+          collegeName,
+          courseName,
+          intakeMonths: intakeMonths || [],
+        })
+        setShowIntakeModal(true)
+        return
+      }
+
+      // Check document compliance
+      const complianceResponse = await checkDocumentCompliance(studentIdForApi, countryId)
+
+      // ApiSuccessResponse wraps data in the "response" field
+      const complianceData = complianceResponse?.response ?? complianceResponse?.data
+
+      if (complianceResponse?.success && complianceData?.compliant) {
+        // Documents are compliant, show intake modal
+        setPendingApplication({
+          collegeCourseId,
+          collegeName,
+          courseName,
+          intakeMonths: intakeMonths || [],
+        })
+        setShowIntakeModal(true)
+      } else if (complianceResponse?.success && !complianceData?.compliant) {
+        // Documents are missing, show missing documents modal
+        const missing = (complianceData?.missingDocuments ?? []) as MissingDocument[]
+        setMissingDocuments(missing)
+        // Persist missing codes so the upload modal can highlight them
+        sessionStorage.setItem("missing_doc_codes", JSON.stringify(missing.map((d) => d.documentTypeCode)))
+        setMissingDocsCountryName(collegeName)
+        setShowMissingDocsModal(true)
+      } else {
+        // API failed — fall back to intake modal rather than blocking the user
+        setPendingApplication({
+          collegeCourseId,
+          collegeName,
+          courseName,
+          intakeMonths: intakeMonths || [],
+        })
+        setShowIntakeModal(true)
+      }
+    } catch (error: any) {
+      console.error("Error checking document compliance:", error)
+      showToast("Error", "An unexpected error occurred while checking documents.")
+    }
+  }
+
+  const handleApplyNowFn = (universityId: string, courseId: string, collegeCourseId?: number, collegeName?: string, courseName?: string, intakeMonths?: string[], countryId?: number) => {
+    // If collegeCourseId is provided (from wishlist), pre-check documents first
     if (collegeCourseId && collegeName && courseName) {
-      setPendingApplication({
-        collegeCourseId,
-        collegeName,
-        courseName,
-        intakeMonths: intakeMonths || [],
-      })
-      setShowIntakeModal(true)
+      checkDocumentComplianceAndApply(collegeCourseId, collegeName, courseName, intakeMonths || [], countryId)
       return
     }
 
@@ -2167,6 +2263,14 @@ export default function DashboardPage() {
         setShowIntakeSuccess(true)
 
         // Don't reset pendingApplication here - it will be reset when modal closes
+      } else if (response?.statusCode === 422 && response?.data && Array.isArray(response.data)) {
+        // Document compliance check failed - show missing documents modal
+        setShowIntakeModal(false)
+        setMissingDocuments(response.data as MissingDocument[])
+        setMissingDocsCountryName(pendingApplication?.collegeName
+          ? undefined
+          : undefined)
+        setShowMissingDocsModal(true)
       } else {
         showToast("Error", response.message || "Failed to start registration")
       }
@@ -2291,7 +2395,8 @@ export default function DashboardPage() {
             university.collegeCourseId,
             university.collegeName,
             university.courseName,
-            university.intakeMonths
+            university.intakeMonths,
+            university.countryId
           )}
         >
           Apply Now
@@ -2331,6 +2436,7 @@ export default function DashboardPage() {
       collegeCourseId: item.collegeCourseId,
       collegeName: item.collegeName,
       courseName: item.courseName,
+      countryId: item.countryId,
       intakeMonths: item.intakeMonths,
     }
 
@@ -3728,7 +3834,7 @@ export default function DashboardPage() {
                   <Upload className="w-5 h-5 text-blue-600" />
                   <h2 className="text-xl font-semibold text-blue-900">Documents Upload Centre</h2>
                 </div>
-                <Button onClick={() => setAddDocumentOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Button onClick={openUploadModal} className="bg-blue-600 hover:bg-blue-700">
                   <Upload className="w-4 h-4 mr-2" />
                   <span className="hidden sm:inline">Upload Document</span>
                   <span className="sm:hidden">Upload</span>
@@ -3792,7 +3898,7 @@ export default function DashboardPage() {
                 <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <div className="text-gray-900 font-medium mb-1">No documents uploaded yet</div>
                 <div className="text-gray-600 mb-4">Start uploading your documents to track them here.</div>
-                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setAddDocumentOpen(true)}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={openUploadModal}>
                   <Upload className="w-4 h-4 mr-2" />
                   Upload First Document
                 </Button>
@@ -3905,50 +4011,102 @@ export default function DashboardPage() {
             {/* Upload Document Modal */}
             {addDocumentOpen && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
                   <h3 className="text-lg font-semibold mb-4 text-blue-900">Upload New Document</h3>
 
                   {documentError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4">
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-4 text-sm">
                       {documentError}
                     </div>
                   )}
 
                   <div className="space-y-4">
+                    {/* Document Type Grouped Dropdown */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Document Name</label>
-                      <Input
-                        value={newDocumentName}
-                        onChange={(e) => setNewDocumentName(e.target.value)}
-                        placeholder="Enter document name"
-                        className="border-blue-300 focus:border-blue-500 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Document Type <span className="text-red-500">*</span>
+                      </label>
                       <select
-                        value={newDocumentCategory}
-                        onChange={(e) => setNewDocumentCategory(e.target.value)}
-                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                        value={isOtherDocType ? "__OTHER__" : selectedDocTypeCode}
+                        onChange={(e) => {
+                          if (e.target.value === "__OTHER__") {
+                            setIsOtherDocType(true)
+                            setSelectedDocTypeCode("")
+                          } else {
+                            setIsOtherDocType(false)
+                            setSelectedDocTypeCode(e.target.value)
+                          }
+                        }}
+                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-sm"
                       >
-                        <option value="">Select category</option>
-                        <option value="Academic">Academic</option>
-                        <option value="Personal">Personal</option>
-                        <option value="Test Scores">Test Scores</option>
-                        <option value="Application">Application</option>
-                        <option value="Financial">Financial</option>
+                        <option value="">— Select document type —</option>
+                        {(["PERSONAL", "ACADEMIC", "FINANCIAL", "IMMIGRATION", "OTHER"] as const).map((cat) => {
+                          const catTypes = availableDocTypes.filter((t) => t.category === cat)
+                          if (catTypes.length === 0) return null
+                          const catLabel = cat.charAt(0) + cat.slice(1).toLowerCase()
+                          return (
+                            <optgroup key={cat} label={catLabel}>
+                              {catTypes.map((t) => {
+                                const isMissing = missingDocCodes.includes(t.code)
+                                return (
+                                  <option key={t.id} value={t.code}>
+                                    {isMissing ? `⚠ ${t.name} (Required)` : t.name}
+                                  </option>
+                                )
+                              })}
+                            </optgroup>
+                          )
+                        })}
+                        {/* Uncategorised fallback */}
+                        {(() => {
+                          const uncategorised = availableDocTypes.filter((t) => !t.category)
+                          return uncategorised.length > 0 ? (
+                            <optgroup label="Other">
+                              {uncategorised.map((t) => (
+                                <option key={t.id} value={t.code}>{t.name}</option>
+                              ))}
+                            </optgroup>
+                          ) : null
+                        })()}
+                        <optgroup label="──────────────">
+                          <option value="__OTHER__">Other (specify)</option>
+                        </optgroup>
                       </select>
+
+                      {/* Show missing docs hint */}
+                      {missingDocCodes.length > 0 && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          ⚠ Documents marked as required are needed for your application
+                        </p>
+                      )}
                     </div>
 
+                    {/* Free-text name for "Other" */}
+                    {isOtherDocType && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Document Name <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          value={otherDocTypeName}
+                          onChange={(e) => setOtherDocTypeName(e.target.value)}
+                          placeholder="e.g. Employment Contract"
+                          className="border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        File <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="file"
                         onChange={(e) => setNewDocumentFile(e.target.files?.[0] || null)}
-                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-sm"
                         accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                       />
+                      <p className="text-xs text-gray-400 mt-1">PDF, JPG, PNG, DOC up to 5 MB</p>
                     </div>
 
                     <div>
@@ -3957,8 +4115,8 @@ export default function DashboardPage() {
                         value={newDocumentRemarks}
                         onChange={(e) => setNewDocumentRemarks(e.target.value)}
                         placeholder="Add any remarks or notes"
-                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
-                        rows={3}
+                        className="w-full p-2 border border-blue-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        rows={2}
                       />
                     </div>
                   </div>
@@ -5045,6 +5203,18 @@ export default function DashboardPage() {
           intakeSession={successIntakeSession}
         />
       )}
+
+      {/* Missing Documents Modal */}
+      <MissingDocumentsModal
+        isOpen={showMissingDocsModal}
+        onClose={() => {
+          setShowMissingDocsModal(false)
+          setMissingDocuments([])
+          setMissingDocsCountryName(undefined)
+        }}
+        missingDocuments={missingDocuments}
+        countryName={missingDocsCountryName}
+      />
     </div>
   )
 }

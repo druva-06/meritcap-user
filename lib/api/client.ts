@@ -536,3 +536,55 @@ export async function updatePhoneNumber(userId: number, phoneNumber: string): Pr
     throw err
   }
 }
+
+// ---- Document Configuration APIs ----
+
+export async function getCountriesForDocConfig(): Promise<any> {
+  try {
+    const res = await axios.get("/api/countries")
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+export async function getCountryDocumentRequirements(countryId: number): Promise<any> {
+  try {
+    const res = await axios.get(`/api/document-config/country-requirements/${countryId}`)
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+export async function getProfileDocumentRequirements(): Promise<any> {
+  try {
+    const res = await axios.get("/api/document-config/profile-requirements")
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+export async function getDocumentTypes(): Promise<any> {
+  try {
+    const res = await axios.get("/api/document-config/document-types")
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}
+
+export async function checkDocumentCompliance(studentId: number, countryId: number): Promise<any> {
+  try {
+    const res = await axios.get(`/api/document-config/compliance/country/${countryId}/student/${studentId}`)
+    return res.data
+  } catch (err: any) {
+    if (err?.response?.data) return err.response.data
+    throw err
+  }
+}

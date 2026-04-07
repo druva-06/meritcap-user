@@ -38,9 +38,11 @@ import { getCollegeCourseDetail, startCourseRegistration } from "@/lib/api/clien
 import { Skeleton } from "@/components/ui/skeleton"
 import { Loader } from "lucide-react"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
+import { MissingDocumentsModal, type MissingDocument } from "@/components/modals/missing-documents-modal"
 import { toast } from "@/hooks/use-toast"
 import type { UnifiedUserProfile } from "@/types/user"
 import { resolveCurrentUserId } from "@/lib/user-identity"
+import { checkDocumentCompliance } from "@/lib/api/client"
 
 export default function CourseDetailPage() {
   const params = useParams()
@@ -64,6 +66,10 @@ export default function CourseDetailPage() {
   const [showIntakeSuccess, setShowIntakeSuccess] = useState(false)
   const [successRegistrationId, setSuccessRegistrationId] = useState<string>("")
   const [successIntakeSession, setSuccessIntakeSession] = useState<string>("")
+
+  // Missing documents modal state
+  const [showMissingDocsModal, setShowMissingDocsModal] = useState(false)
+  const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
 
   // Load user data
   useEffect(() => {
@@ -138,6 +144,7 @@ export default function CourseDetailPage() {
           mappedUniversity.logo = data.college.collegeLogo || mappedUniversity.logo
           mappedUniversity.location = data.college.campusName || mappedUniversity.location || data.college.country
           mappedUniversity.country = data.college.country || mappedUniversity.country
+          mappedUniversity.countryId = data.college.countryId || mappedUniversity.countryId
           mappedUniversity.establishedYear = data.college.establishedYear || mappedUniversity.establishedYear
           mappedUniversity.description = data.college.description || mappedUniversity.description
           mappedUniversity.highlights = mappedUniversity.highlights || []
@@ -375,7 +382,31 @@ export default function CourseDetailPage() {
     return validIntakes[0].code
   }
 
-  const handleApplyNow = () => {
+  const handleApplyNow = async () => {
+    try {
+      const studentIdForApi = resolveCurrentUserId(userData)
+      // countryId is stored on the university/college object, not on the course
+      const countryId = fetchedUniversity?.countryId ?? university?.countryId
+      if (studentIdForApi && countryId) {
+        // Pre-check document compliance
+        const complianceResponse = await checkDocumentCompliance(studentIdForApi, countryId)
+
+        // ApiSuccessResponse wraps data in the "response" field
+        const complianceData = complianceResponse?.response ?? complianceResponse?.data
+
+        if (complianceResponse?.success && !complianceData?.compliant) {
+          const missing = (complianceData?.missingDocuments ?? []) as MissingDocument[]
+          setMissingDocuments(missing)
+          sessionStorage.setItem("missing_doc_codes", JSON.stringify(missing.map((d) => d.documentTypeCode)))
+          setShowMissingDocsModal(true)
+          return
+        }
+      }
+    } catch (error: any) {
+      console.error("Error checking document compliance:", error)
+      // Continue with the application flow even if the check fails
+    }
+
     // Show intake selection modal before navigating to application
     setShowIntakeModal(true)
   }
@@ -1432,6 +1463,14 @@ export default function CourseDetailPage() {
         showSuccess={showIntakeSuccess}
         registrationId={successRegistrationId}
         intakeSession={successIntakeSession}
+      />
+
+      <MissingDocumentsModal
+        isOpen={showMissingDocsModal}
+        onClose={() => setShowMissingDocsModal(false)}
+        missingDocuments={missingDocuments}
+        countryName={university?.name}
+        autoRedirectOnClose={true}
       />
     </div>
   )
