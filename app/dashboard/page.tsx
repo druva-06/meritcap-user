@@ -50,7 +50,7 @@ import {
 import type { UnifiedUserProfile } from "@/types/user"
 import { toast } from "@/hooks/use-toast"
 import { getEncryptedUser, setEncryptedUser } from "@/lib/encryption"
-import { getWishlistItems, removeWishlistItem, uploadDocument, getDocumentsList, deleteDocument, startCourseRegistration, getStudentRegistrations, checkDocumentCompliance, getDocumentTypes } from "@/lib/api/client"
+import { getWishlistItems, removeWishlistItem, uploadDocument, getDocumentsList, deleteDocument, startCourseRegistration, getStudentRegistrations, checkDocumentCompliance, getDocumentTypes, getDocumentPresignedUrl } from "@/lib/api/client"
 import { IntakeSelectionModal } from "@/components/modals/intake-selection-modal"
 import { MissingDocumentsModal, type MissingDocument } from "@/components/modals/missing-documents-modal"
 import { resolveCurrentUserId } from "@/lib/user-identity"
@@ -1880,8 +1880,12 @@ export default function DashboardPage() {
     try {
       showToast("Downloading", `Downloading ${document.name}...`)
 
-      // Fetch the file
-      const response = await fetch(document.url)
+      // Get a presigned URL for the private S3 file
+      const presignedUrl = await getDocumentPresignedUrl(document.id)
+
+      // Fetch the file via presigned URL
+      const response = await fetch(presignedUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const blob = await response.blob()
 
       // Create a temporary URL and trigger download
@@ -1890,9 +1894,9 @@ export default function DashboardPage() {
       link.href = url
 
       // Extract filename from URL or use document name
-      const urlParts = document.url.split('/')
-      const filename = urlParts[urlParts.length - 1] || `${document.name}.pdf`
-      link.download = filename
+      const urlParts = presignedUrl.split('/')
+      const rawName = urlParts[urlParts.length - 1]?.split('?')[0] || `${document.name}.pdf`
+      link.download = rawName
 
       window.document.body.appendChild(link)
       link.click()
@@ -1906,21 +1910,27 @@ export default function DashboardPage() {
     }
   }
 
-  const handlePreviewDocument = (document: Document, event?: React.MouseEvent) => {
-    // Prevent any default behavior
+  const handlePreviewDocument = async (document: Document, event?: React.MouseEvent) => {
     if (event) {
       event.preventDefault()
       event.stopPropagation()
     }
 
-    if (!document.url) {
-      showToast("Preview Failed", "Document URL not available")
+    if (!document.id) {
+      showToast("Preview Failed", "Document not available")
       return
     }
 
-    // Open preview modal instead of new tab
-    setPreviewDocument(document)
-    setPreviewDocumentOpen(true)
+    try {
+      // Fetch a 15-min presigned URL for the private S3 file
+      const presignedUrl = await getDocumentPresignedUrl(document.id)
+      // Open modal with the presigned URL substituted as the preview URL
+      setPreviewDocument({ ...document, url: presignedUrl })
+      setPreviewDocumentOpen(true)
+    } catch (error) {
+      console.error("Preview error:", error)
+      showToast("Preview Failed", "Could not load document preview. Please try again.")
+    }
   }
 
   const handleClosePreview = () => {

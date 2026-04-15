@@ -287,6 +287,22 @@ export async function deleteDocument(documentId: number): Promise<any> {
   }
 }
 
+// Document Presigned URL API
+export async function getDocumentPresignedUrl(documentId: number): Promise<string> {
+  try {
+    const res = await axios.get(`/api/documents/${documentId}/presigned-url`)
+    // Backend returns { data: "https://presigned-url...", message: "...", code: 200 }
+    const url = res.data?.data ?? res.data?.response
+    if (!url || typeof url !== "string") {
+      throw new Error("Invalid presigned URL response")
+    }
+    return url
+  } catch (err: any) {
+    if (err?.response?.data) throw new Error(err.response.data?.message || "Failed to get document URL")
+    throw err
+  }
+}
+
 // Student College Course Registration API
 export async function startCourseRegistration(data: {
   student_id: number
