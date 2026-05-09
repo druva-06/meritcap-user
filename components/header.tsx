@@ -51,10 +51,11 @@ export function Header() {
   useEffect(() => {
     const checkAuthState = () => {
       try {
-        // Try to get encrypted user data first
+        // Require both user data AND a valid token — either alone is an inconsistent state
+        const token = localStorage.getItem("meritcap_access_token") || sessionStorage.getItem("meritcap_access_token")
+
         let user = getEncryptedUser()
 
-        // Fallback to unencrypted data
         if (!user) {
           const userData = localStorage.getItem("meritcap_user") || sessionStorage.getItem("meritcap_user")
           if (userData) {
@@ -62,23 +63,12 @@ export function Header() {
           }
         }
 
-        if (user) {
+        if (user && token) {
           setIsLoggedIn(true)
           setUserName(
-            user.name ||
-            `${user.first_name || user.firstName || ""} ${user.last_name || user.lastName || ""}`.trim() ||
-            "User"
+            (user.name || `${user.first_name || user.firstName || ""} ${user.last_name || user.lastName || ""}`.trim() || "User").trim() || "User"
           )
           setProfilePicture(user.profile_picture || user.profilePicture || "")
-          return
-        }
-
-        // fallback: check for access token presence
-        const token = localStorage.getItem("meritcap_access_token") || sessionStorage.getItem("meritcap_access_token")
-        if (token) {
-          setIsLoggedIn(true)
-          setUserName("User")
-          setProfilePicture("")
           return
         }
 

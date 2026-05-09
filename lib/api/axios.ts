@@ -3,7 +3,7 @@
 import axios from "axios"
 import { toast } from "@/hooks/use-toast"
 import { getToken, clearTokens, getRefreshToken, saveToken } from "@/lib/auth"
-import { getEncryptedUser } from "@/lib/encryption"
+import { getEncryptedUser, removeEncryptedUser } from "@/lib/encryption"
 
 const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
 
@@ -38,36 +38,32 @@ function processRefreshQueue(error: any, token: string | null) {
 }
 
 function handleAuthFailure(message = "Session expired") {
-  try {
-    clearTokens()
-    if (typeof window !== "undefined") {
-      // Remove stored user/profile + any meritcap_* keys (localStorage & sessionStorage)
-      try {
-        const purge = (storage: Storage) => {
-          const keys: string[] = []
-          for (let i = 0; i < storage.length; i++) {
-            const key = storage.key(i)
-            if (!key) continue
-            if (key.startsWith("meritcap_")) keys.push(key)
-            if (key === "meritcap_user") keys.push(key)
-          }
-          keys.forEach((k) => storage.removeItem(k))
-        }
-        purge(localStorage)
-        purge(sessionStorage)
-      } catch {}
-      // Broadcast auth change
-      window.dispatchEvent(new Event("authStateChanged"))
-      // Redirect to login (preserve intended page as redirect param if desired)
-      try {
-        const current = window.location.pathname + window.location.search
-        const loginUrl = `/login?redirect=${encodeURIComponent(current)}`
-        if (!window.location.pathname.startsWith("/login")) {
-          window.location.replace(loginUrl)
-        }
-      } catch {}
+  clearTokens()
+  removeEncryptedUser()
+
+  if (typeof window !== "undefined") {
+    // Remove all meritcap_* keys from both storages
+    const purge = (storage: Storage) => {
+      const keys: string[] = []
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)
+        if (key && key.startsWith("meritcap_")) keys.push(key)
+      }
+      keys.forEach((k) => storage.removeItem(k))
     }
-  } catch {}
+    purge(localStorage)
+    purge(sessionStorage)
+
+    // Redirect first, then broadcast — the current page is being destroyed anyway
+    const current = window.location.pathname + window.location.search
+    const loginUrl = `/login?redirect=${encodeURIComponent(current)}`
+    if (!window.location.pathname.startsWith("/login")) {
+      window.location.replace(loginUrl)
+    } else {
+      window.dispatchEvent(new Event("authStateChanged"))
+    }
+  }
+
   toast({ title: message, description: "Please login again", variant: "destructive" })
 }
 
